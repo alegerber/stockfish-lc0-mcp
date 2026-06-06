@@ -15,6 +15,7 @@
     "test": "vitest run --exclude tests/integration.test.ts",
     "test:integration": "vitest run tests/integration.test.ts",
     "test:all": "vitest run",
+    "smoke": "node scripts/smoke-test.mjs",
     "lint": "eslint"
   },
   "dependencies": {
