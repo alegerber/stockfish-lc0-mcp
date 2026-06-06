@@ -18,7 +18,10 @@ export default [
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
       'eqeqeq': ['error', 'always'],
-      'no-console': 'warn',
+      // stdout is reserved for the MCP JSON-RPC transport, so all diagnostic
+      // logging goes to stderr via console.error/console.warn. Allow those and
+      // keep flagging console.log, which would corrupt the protocol stream.
+      'no-console': ['warn', { allow: ['error', 'warn'] }],
     },
   },
   {
