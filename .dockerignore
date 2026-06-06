@@ -1,0 +1,21 @@
+# Keep the build context small and fast to send to the daemon.
+# IMPORTANT: do not ignore anything a Dockerfile COPYs —
+#   Dockerfile        copies package.json, package-lock.json, tsconfig.json, src/
+#   Dockerfile.test   additionally copies tests/
+# so src/, tests/ and the manifests must stay in context.
+
+node_modules
+dist
+
+.git
+.github
+.gitignore
+
+.claude
+.context
+
+scripts
+*.md
+*.log
+npm-debug.log*
+.DS_Store

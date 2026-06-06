@@ -16,6 +16,7 @@
     "test:integration": "vitest run tests/integration.test.ts",
     "test:all": "vitest run",
     "smoke": "node scripts/smoke-test.mjs",
+    "smoke:docker": "docker build -t stockfish-lc0-mcp . && SMOKE_DOCKER_IMAGE=stockfish-lc0-mcp node scripts/smoke-test.mjs",
     "lint": "eslint"
   },
   "dependencies": {
