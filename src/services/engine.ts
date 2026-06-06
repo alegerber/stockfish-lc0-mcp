@@ -5,6 +5,7 @@ import {
   DEFAULT_MULTI_PV,
   DEFAULT_THREADS,
   DEFAULT_HASH_MB,
+  DEFAULT_ENGINE_TIMEOUT_MS,
   LC0_DEPTH_TO_NODES,
 } from '../constants.js';
 import type { UciEngine, UciLine, UciScore, PositionAnalysis } from '../types.js';
@@ -94,6 +95,7 @@ abstract class BaseUciEngine implements UciEngine {
   protected process: ChildProcessWithoutNullStreams | null = null;
   protected binaryPath: string;
   protected ready = false;
+  protected timeoutMs: number;
   abstract readonly displayName: string;
 
   /**
@@ -103,13 +105,22 @@ abstract class BaseUciEngine implements UciEngine {
   private pendingReject: ((err: Error) => void) | null = null;
 
   /**
-   * Serialises sendAndWait calls so only one is in flight at a time,
-   * preventing multiple data listeners from accumulating on stdout.
+   * Mutex: serialises whole operations (init/analyse) so concurrent callers on
+   * the same engine can never interleave their UCI commands on stdin/stdout.
    */
-  private sendQueue: Promise<void> = Promise.resolve();
+  private opQueue: Promise<unknown> = Promise.resolve();
 
-  constructor(binaryPath: string) {
+  constructor(binaryPath: string, timeoutMs: number = DEFAULT_ENGINE_TIMEOUT_MS) {
     this.binaryPath = binaryPath;
+    this.timeoutMs = timeoutMs;
+  }
+
+  /** Run `fn` as an exclusive critical section on this engine. */
+  private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const result = this.opQueue.then(() => fn());
+    // Advance the queue even when this op rejects, so the next one still runs.
+    this.opQueue = result.then(() => {}, () => {});
+    return result;
   }
 
   /** Send engine-specific UCI options after the uci/uciok handshake. */
@@ -119,8 +130,16 @@ abstract class BaseUciEngine implements UciEngine {
   protected abstract buildGoCommand(depth: number): string;
 
   async init(): Promise<void> {
-    if (this.process) return;
+    await this.runExclusive(() => this.ensureReadyInternal());
+  }
 
+  /** Spawn + handshake if not already ready. Assumes the mutex is held. */
+  private async ensureReadyInternal(): Promise<void> {
+    if (this.process && this.ready) return;
+    await this.spawnAndHandshake();
+  }
+
+  private async spawnAndHandshake(): Promise<void> {
     this.process = spawn(this.binaryPath, [], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -143,6 +162,17 @@ abstract class BaseUciEngine implements UciEngine {
       reject?.(new Error(`Engine process exited with code ${code}`));
     });
 
+    // The std streams emit their own 'error' events (e.g. EPIPE when the engine
+    // is killed while a write is buffered). With no listener those would crash
+    // the whole MCP server, so log and swallow — the operation still fails via
+    // the write callback or the 'exit' handler above.
+    const onStreamError = (stream: string) => (err: Error): void => {
+      console.error(`[${this.displayName}] ${stream} error: ${err.message}`);
+    };
+    this.process.stdin.on('error', onStreamError('stdin'));
+    this.process.stdout.on('error', onStreamError('stdout'));
+    this.process.stderr.on('error', onStreamError('stderr'));
+
     await this.sendAndWait('uci', 'uciok');
     await this.configureOptions();
     await this.sendAndWait('isready', 'readyok');
@@ -150,35 +180,26 @@ abstract class BaseUciEngine implements UciEngine {
     console.error(`[${this.displayName}] Engine initialized`);
   }
 
-  protected async ensureReady(): Promise<void> {
-    if (!this.process || !this.ready) {
-      await this.init();
-    }
-  }
-
+  /** Write a command to the engine's stdin. */
   protected send(cmd: string): Promise<void> {
+    const proc = this.process;
+    if (!proc) return Promise.reject(new Error(`${this.displayName} not running`));
     return new Promise((resolve, reject) => {
-      if (!this.process) return reject(new Error(`${this.displayName} not running`));
-      this.process.stdin.write(`${cmd}\n`, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
+      // The write callback fires once the chunk is flushed (which also orders
+      // correctly under backpressure). UCI commands are tiny, so the pipe buffer
+      // is never a concern; if the pipe breaks (engine killed) the callback
+      // rejects with EPIPE instead of hanging.
+      proc.stdin.write(`${cmd}\n`, (err) => (err ? reject(err) : resolve()));
     });
   }
 
   /**
-   * Send a command and collect all output until a line starting with `until`
-   * is received. Calls are serialised via sendQueue so only one listener is
-   * ever attached to stdout at a time.
+   * Send a command and collect all output until a line starting with `until`.
+   * Must be called from inside a runExclusive() section, so only one stdout
+   * listener is ever attached at a time. Defaults to `this.timeoutMs`.
    */
-  protected sendAndWait(cmd: string, until: string, timeoutMs = 60_000): Promise<string[]> {
-    const queued = this.sendQueue.then(() => this._sendAndWait(cmd, until, timeoutMs));
-    // Always advance the queue, even when this call rejects.
-    this.sendQueue = queued.then(() => {}, () => {});
-    return queued;
-  }
-
-  private _sendAndWait(cmd: string, until: string, timeoutMs: number): Promise<string[]> {
+  protected sendAndWait(cmd: string, until: string, timeoutMs?: number): Promise<string[]> {
+    const ms = timeoutMs ?? this.timeoutMs;
     return new Promise((resolve, reject) => {
       if (!this.process) return reject(new Error(`${this.displayName} not running`));
 
@@ -186,8 +207,8 @@ abstract class BaseUciEngine implements UciEngine {
       let buffer = '';
       const timeout = setTimeout(() => {
         cleanup();
-        reject(new Error(`Timeout waiting for "${until}" after ${timeoutMs}ms`));
-      }, timeoutMs);
+        reject(new Error(`Timeout waiting for "${until}" after ${ms}ms`));
+      }, ms);
 
       const onData = (chunk: Buffer): void => {
         buffer += chunk.toString();
@@ -230,15 +251,23 @@ abstract class BaseUciEngine implements UciEngine {
     depth = DEFAULT_DEPTH,
     multiPv = DEFAULT_MULTI_PV
   ): Promise<PositionAnalysis> {
-    await this.ensureReady();
+    return this.runExclusive(() => this.analyseInternal(fen, depth, multiPv));
+  }
+
+  /** The full analysis transaction. Assumes the mutex is held. */
+  private async analyseInternal(
+    fen: string,
+    depth: number,
+    multiPv: number
+  ): Promise<PositionAnalysis> {
+    await this.ensureReadyInternal();
 
     await this.send('ucinewgame');
     await this.sendAndWait('isready', 'readyok');
     await this.send(`setoption name MultiPV value ${multiPv}`);
     await this.send(`position fen ${fen}`);
 
-    const goCmd = this.buildGoCommand(depth);
-    const output = await this.sendAndWait(goCmd, 'bestmove');
+    const output = await this.sendAndWait(this.buildGoCommand(depth), 'bestmove');
 
     const lines = parseInfoLines(output, multiPv);
     const bestMoveLine = output.find((l) => l.startsWith('bestmove'));
@@ -249,9 +278,7 @@ abstract class BaseUciEngine implements UciEngine {
     }
 
     const topLine = lines[0];
-    const evaluation: UciScore = topLine
-      ? topLine.score
-      : { type: 'cp', value: 0 };
+    const evaluation: UciScore = topLine ? topLine.score : { type: 'cp', value: 0 };
 
     return { fen, bestMove, evaluation, lines, depth };
   }
@@ -262,16 +289,24 @@ abstract class BaseUciEngine implements UciEngine {
   }
 
   async quit(): Promise<void> {
-    if (this.process) {
-      await this.send('quit');
-      // Remove listeners before kill() so the async exit event cannot
-      // fire pendingReject and corrupt a subsequent init() call.
-      this.process.removeAllListeners('error');
-      this.process.removeAllListeners('exit');
-      this.process.kill();
-      this.process = null;
-      this.ready = false;
+    const proc = this.process;
+    if (!proc) return;
+    // Reject any in-flight sendAndWait first so it doesn't hang until timeout.
+    const reject = this.pendingReject;
+    this.pendingReject = null;
+    reject?.(new Error(`${this.displayName} engine shutting down`));
+    // Drop our handlers so the async exit event can't fire pendingReject and
+    // corrupt a subsequent init().
+    proc.removeAllListeners('error');
+    proc.removeAllListeners('exit');
+    this.process = null;
+    this.ready = false;
+    try {
+      proc.stdin.write('quit\n');
+    } catch {
+      /* process may already be gone */
     }
+    proc.kill();
   }
 }
 
@@ -285,9 +320,10 @@ export class StockfishEngine extends BaseUciEngine {
   constructor(
     binaryPath = 'stockfish',
     threads = DEFAULT_THREADS,
-    hashMb = DEFAULT_HASH_MB
+    hashMb = DEFAULT_HASH_MB,
+    timeoutMs = DEFAULT_ENGINE_TIMEOUT_MS
   ) {
-    super(binaryPath);
+    super(binaryPath, timeoutMs);
     this.threads = threads;
     this.hashMb = hashMb;
   }
@@ -316,9 +352,10 @@ export class Lc0Engine extends BaseUciEngine {
     weightsPath: string,
     backend?: string,
     threads = DEFAULT_THREADS,
-    hashMb = DEFAULT_HASH_MB
+    hashMb = DEFAULT_HASH_MB,
+    timeoutMs = DEFAULT_ENGINE_TIMEOUT_MS
   ) {
-    super(binaryPath);
+    super(binaryPath, timeoutMs);
     this.weightsPath = weightsPath;
     this.backend = backend;
     this.threads = threads;

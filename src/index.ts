@@ -13,6 +13,7 @@ import { analysePosition } from './tools/analyse-position.js';
 import { analyseGame } from './tools/analyse-game.js';
 import { lookupOpeningByQuery, identifyOpeningFromPgn } from './tools/openings.js';
 import { generatePuzzle } from './tools/puzzle.js';
+import { DEFAULT_ENGINE_TIMEOUT_MS } from './constants.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -52,8 +53,9 @@ function wrapTool<T>(
 const SF_PATH = process.env.STOCKFISH_PATH ?? 'stockfish';
 const SF_THREADS = parsePositiveInt(process.env.STOCKFISH_THREADS, 'STOCKFISH_THREADS', 2);
 const SF_HASH = parsePositiveInt(process.env.STOCKFISH_HASH, 'STOCKFISH_HASH', 128);
+const ENGINE_TIMEOUT_MS = parsePositiveInt(process.env.ENGINE_TIMEOUT_MS, 'ENGINE_TIMEOUT_MS', DEFAULT_ENGINE_TIMEOUT_MS);
 
-const sfEngine = new StockfishEngine(SF_PATH, SF_THREADS, SF_HASH);
+const sfEngine = new StockfishEngine(SF_PATH, SF_THREADS, SF_HASH, ENGINE_TIMEOUT_MS);
 
 // ── Lc0 configuration (optional — only enabled when LC0_WEIGHTS_PATH is set) ─
 const LC0_PATH = process.env.LC0_PATH ?? 'lc0';
@@ -65,7 +67,7 @@ const lc0Enabled = LC0_WEIGHTS.length > 0;
 let lc0Engine: Lc0Engine | null = null;
 
 if (lc0Enabled) {
-  lc0Engine = new Lc0Engine(LC0_PATH, LC0_WEIGHTS, LC0_BACKEND, LC0_THREADS, LC0_HASH);
+  lc0Engine = new Lc0Engine(LC0_PATH, LC0_WEIGHTS, LC0_BACKEND, LC0_THREADS, LC0_HASH, ENGINE_TIMEOUT_MS);
 }
 
 const server = new McpServer({
