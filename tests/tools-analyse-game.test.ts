@@ -127,3 +127,68 @@ describe('analyseGame', () => {
     expect(result.text).toContain('Move-by-Move');
   });
 });
+
+// A mock engine encoding a STEADY +0.30 White advantage, expressed in the
+// engine's side-to-move perspective: White to move -> +cp, Black to move -> -cp.
+// A correct report must display this as a stable +0.30 on every ply (White POV),
+// never alternating -0.30 / +0.30 with the side to move.
+function makeStaticWhiteAdvantageEngine(cp = 30): UciEngine {
+  return {
+    displayName: 'StaticWhiteAdv',
+    init: vi.fn(),
+    analyse: vi.fn(async (fen: string) => {
+      const sideToMove = fen.split(' ')[1];
+      const value = sideToMove === 'w' ? cp : -cp;
+      return {
+        fen,
+        bestMove: 'e2e4',
+        evaluation: { type: 'cp' as const, value },
+        lines: [
+          {
+            depth: 20,
+            score: { type: 'cp' as const, value },
+            pv: ['e2e4'],
+            pvSan: [],
+            nodes: 1,
+            nps: 1,
+            time: 1,
+            multipv: 1,
+          },
+        ],
+        depth: 20,
+      } satisfies PositionAnalysis;
+    }),
+    bestMove: vi.fn(async () => 'e2e4'),
+    quit: vi.fn(),
+  };
+}
+
+describe('analyseGame — evaluation display (White POV normalisation)', () => {
+  it('shows a steady White advantage with a stable sign across plies', async () => {
+    const engine = makeStaticWhiteAdvantageEngine(30);
+    const result = await analyseGame(engine, '1. e4 e5 2. Nf3 Nc6', 20);
+    const moves = result.json.moves as Array<{ evaluation: string }>;
+
+    // +0.30 for White must read +0.30 after every move, regardless of side.
+    for (const m of moves) {
+      expect(m.evaluation).toBe('+0.30');
+    }
+    // The Markdown report must not contain the perspective-flipped value.
+    expect(result.text).not.toContain('-0.30');
+  });
+
+  it('renders a delivered checkmate as "#", not "-M0"', async () => {
+    const engine = makeStaticWhiteAdvantageEngine(30);
+    const result = await analyseGame(
+      engine,
+      '1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#',
+      20
+    );
+    const moves = result.json.moves as Array<{ move: string; evaluation: string }>;
+    const mateMove = moves[moves.length - 1];
+
+    expect(mateMove.move).toBe('Qxf7#');
+    expect(mateMove.evaluation).toBe('#');
+    expect(result.text).not.toContain('-M0');
+  });
+});
