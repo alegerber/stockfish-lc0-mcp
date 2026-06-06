@@ -4,10 +4,32 @@ import type { UciScore, PositionAnalysis, MoveClassification, GameAnalysis } fro
 /** Format a UCI score as a human-readable string. */
 export function formatScore(score: UciScore): string {
   if (score.type === 'mate') {
+    // value 0 is the sentinel for "checkmate already on the board" — render it
+    // as the standard chess symbol instead of a signed "M0"/"-M0".
+    if (score.value === 0) return '#';
     return score.value > 0 ? `M${score.value}` : `-M${Math.abs(score.value)}`;
   }
   const cp = score.value / 100;
   return cp >= 0 ? `+${cp.toFixed(2)}` : cp.toFixed(2);
+}
+
+/** Negate a score (flip the side-to-move perspective), preserving cp/mate type. */
+export function negateScore(score: UciScore): UciScore {
+  // `|| 0` collapses the -0 that negating a 0 produces, keeping output clean.
+  return { type: score.type, value: -score.value || 0 };
+}
+
+/**
+ * Convert a move's stored `evalAfter` to White's perspective for display.
+ *
+ * `evalAfter` is the raw engine score from the perspective of the side to move
+ * AFTER the move. After a White move that side is Black, so White's eval is the
+ * negation; after a Black move it is already from White's perspective. Reports
+ * (Lichess/chess.com convention) always show eval from White's POV so a steady
+ * advantage keeps a steady sign.
+ */
+export function whitePovScore(evalAfter: UciScore, side: 'white' | 'black'): UciScore {
+  return side === 'white' ? negateScore(evalAfter) : evalAfter;
 }
 
 /** Format a position analysis as Markdown. */
@@ -53,7 +75,7 @@ export function formatGameAnalysis(analysis: GameAnalysis): string {
   for (const m of analysis.moves) {
     const icon = classificationIcon(m.classification);
     const moveNum = m.side === 'white' ? `${m.moveNumber}.` : `${m.moveNumber}...`;
-    const evalStr = formatScore(m.evalAfter);
+    const evalStr = formatScore(whitePovScore(m.evalAfter, m.side));
     const bestStr = m.bestMoveSan !== m.moveSan ? ` (best: ${m.bestMoveSan})` : '';
     parts.push(`${moveNum} ${m.moveSan} ${icon} [${evalStr}]${bestStr}`);
   }

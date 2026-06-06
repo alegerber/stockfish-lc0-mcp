@@ -2,7 +2,7 @@
 import type { UciEngine, MoveAnalysis, MoveClassification, GameAnalysis, UciScore } from '../types.js';
 import { centipawns } from '../types.js';
 import { parsePgn, uciToSan, lookupOpening, isGameOver } from '../services/chess-utils.js';
-import { formatGameAnalysis, formatScore } from '../services/formatting.js';
+import { formatGameAnalysis, formatScore, whitePovScore } from '../services/formatting.js';
 import { START_FEN, BLUNDER_THRESHOLD, MISTAKE_THRESHOLD, INACCURACY_THRESHOLD, GOOD_THRESHOLD, EXCELLENT_THRESHOLD } from '../constants.js';
 
 export async function analyseGame(
@@ -134,7 +134,9 @@ export async function analyseGame(
       moveNumber: m.moveNumber,
       side: m.side,
       move: m.moveSan,
-      evaluation: formatScore(m.evalAfter),
+      // evalAfter is stored raw (engine = side-to-move-after-the-move POV) for the
+      // drop/accuracy math above; normalise to White's POV only here for display.
+      evaluation: formatScore(whitePovScore(m.evalAfter, m.side)),
       bestMove: m.bestMoveSan,
       classification: m.classification,
       evalDrop: Math.round(m.evalDrop),
