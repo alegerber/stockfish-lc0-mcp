@@ -24,7 +24,9 @@ const describeIfSf = stockfishAvailable ? describe : describe.skip;
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function makeEngine(): StockfishEngine {
-  return new StockfishEngine(SF_BIN, 1, 16);
+  // 30s engine timeout < the 60s per-test vitest budget, so a stuck engine
+  // surfaces the descriptive engine error instead of an opaque test timeout.
+  return new StockfishEngine(SF_BIN, 1, 16, 30_000);
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────────

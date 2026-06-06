@@ -8,6 +8,11 @@ export const MAX_DEPTH = 30;
 export const MAX_MULTI_PV = 5;
 export const CHARACTER_LIMIT = 50000;
 
+// Max time to wait for a single UCI command to complete (handshake or a `go`
+// search). A deep game analysis (depth 22) can be slow, so this is generous;
+// override per deployment via the ENGINE_TIMEOUT_MS env var.
+export const DEFAULT_ENGINE_TIMEOUT_MS = 120_000;
+
 // Thresholds for move classification (in centipawns)
 export const BLUNDER_THRESHOLD = 200;
 export const MISTAKE_THRESHOLD = 100;

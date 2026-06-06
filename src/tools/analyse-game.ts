@@ -1,8 +1,8 @@
 // Tool: Analyse a full game from PGN
-import type { UciEngine, MoveAnalysis, MoveClassification, GameAnalysis, UciScore } from '../types.js';
+import type { UciEngine, MoveAnalysis, MoveClassification, GameAnalysis, UciScore, PositionAnalysis } from '../types.js';
 import { centipawns } from '../types.js';
 import { parsePgn, uciToSan, lookupOpening, isGameOver } from '../services/chess-utils.js';
-import { formatGameAnalysis, formatScore, whitePovScore } from '../services/formatting.js';
+import { formatGameAnalysis, formatScore, whitePovScore, negateScore } from '../services/formatting.js';
 import { START_FEN, BLUNDER_THRESHOLD, MISTAKE_THRESHOLD, INACCURACY_THRESHOLD, GOOD_THRESHOLD, EXCELLENT_THRESHOLD } from '../constants.js';
 
 export async function analyseGame(
@@ -23,12 +23,16 @@ export async function analyseGame(
   const opening = lookupOpening(sanMoves);
   const openingName = opening?.name ?? headers['ECO'] ?? 'Unknown';
 
-  // Evaluate starting position
-  const startEval = await engine.analyse(START_FEN, depth, 1);
-  let prevScore: UciScore = startEval.evaluation;
+  // Analyse the starting position once. This analysis is carried forward and
+  // reused as the "before" analysis of the next move, so each position is
+  // analysed exactly once (N+1 calls, not 2N+1). safeAnalyse returns null on
+  // engine failure (timeout/crash) instead of throwing.
+  let prevAnalysis: PositionAnalysis | null = await safeAnalyse(engine, START_FEN, depth);
+  let prevScore: UciScore = prevAnalysis?.evaluation ?? { type: 'cp', value: 0 };
 
   const moveAnalyses: MoveAnalysis[] = [];
   let currentFen = START_FEN;
+  let skippedMoves = 0;
 
   for (let i = 0; i < moves.length; i++) {
     const move = moves[i];
@@ -39,14 +43,16 @@ export async function analyseGame(
     // Check if the position after the move is terminal (checkmate/stalemate)
     const terminal = isGameOver(move.fen);
 
-    // Analyse what the best move WAS in the position before
-    const posBefore = await engine.analyse(fenBefore, depth, 1);
-    const bestMoveUci = posBefore.bestMove;
-    const bestMoveSan = uciToSan(fenBefore, bestMoveUci);
+    // Best move in the position before — reused from the previous iteration's
+    // analysis (its position == this fenBefore). Empty if that analysis failed.
+    const bestMoveUci = prevAnalysis?.bestMove ?? '';
+    const bestMoveSan = bestMoveUci ? uciToSan(fenBefore, bestMoveUci) : '';
 
     let evalAfterScore: UciScore;
     let drop: number;
     let classification: MoveClassification;
+    // Analysis of the position AFTER this move; carried into the next iteration.
+    let curAnalysis: PositionAnalysis | null = null;
 
     if (terminal.over && terminal.reason === 'checkmate') {
       // The mover delivered checkmate — this is always the best move.
@@ -61,19 +67,27 @@ export async function analyseGame(
       drop = Math.max(0, evalBeforeForMover); // losing a winning position is bad
       classification = classifyMove(drop, move.san === bestMoveSan);
     } else {
-      // Normal position — analyse after the move
-      const posAfter = await engine.analyse(move.fen, depth, 1);
-      evalAfterScore = posAfter.evaluation;
+      // Normal position — analyse after the move (reused as next "before").
+      curAnalysis = await safeAnalyse(engine, move.fen, depth);
+      if (curAnalysis === null) {
+        // Engine failed (timeout/crash): tolerate it — mark this move
+        // unanalysed, keep the eval chain stable, and continue the game.
+        evalAfterScore = prevScore;
+        drop = 0;
+        classification = 'unknown';
+        skippedMoves++;
+      } else {
+        evalAfterScore = curAnalysis.evaluation;
 
-      // Stockfish reports scores from the side-to-move's perspective.
-      // prevScore is from `side`'s perspective (side-to-move before the move).
-      // posAfter.evaluation is from the opponent's perspective (side-to-move after the move).
-      // Normalise both to the moving player's perspective to compute eval drop.
-      const evalBeforeForMover = centipawns(prevScore); // already from mover's POV
-      const evalAfterForMover = -centipawns(posAfter.evaluation); // negate: opponent's POV → mover's POV
+        // Scores are from the side-to-move's perspective. prevScore is from the
+        // mover's POV; curAnalysis.evaluation is from the opponent's POV (side to
+        // move after the move). Normalise both to the mover's POV for the drop.
+        const evalBeforeForMover = centipawns(prevScore);
+        const evalAfterForMover = -centipawns(curAnalysis.evaluation);
 
-      drop = evalBeforeForMover - evalAfterForMover;
-      classification = classifyMove(drop, move.san === bestMoveSan);
+        drop = evalBeforeForMover - evalAfterForMover;
+        classification = classifyMove(drop, move.san === bestMoveSan);
+      }
     }
 
     moveAnalyses.push({
@@ -91,7 +105,18 @@ export async function analyseGame(
       evalDrop: drop,
     });
 
-    prevScore = evalAfterScore;
+    if (classification === 'unknown') {
+      // The after-position eval is unknown. Flip the before-eval to the next
+      // mover's POV (they alternate) so the following move's drop is at least in
+      // the correct frame — an approximation, since the true after-eval is gone.
+      prevScore = negateScore(prevScore);
+    } else {
+      prevScore = evalAfterScore;
+    }
+    // After a terminal/failed move prevAnalysis is null, so the NEXT move has no
+    // reused "before" analysis: its bestMoveSan is '' and it cannot be tagged
+    // 'best'. Accepted trade-off of the single-analysis-per-position optimisation.
+    prevAnalysis = curAnalysis;
     currentFen = move.fen;
 
     // Log progress to stderr
@@ -113,6 +138,7 @@ export async function analyseGame(
     blackMistakes: count(moveAnalyses, 'black', 'mistake'),
     blackInaccuracies: count(moveAnalyses, 'black', 'inaccuracy'),
     opening: openingName,
+    skippedMoves,
   };
 
   const analysis: GameAnalysis = {
@@ -136,7 +162,10 @@ export async function analyseGame(
       move: m.moveSan,
       // evalAfter is stored raw (engine = side-to-move-after-the-move POV) for the
       // drop/accuracy math above; normalise to White's POV only here for display.
-      evaluation: formatScore(whitePovScore(m.evalAfter, m.side)),
+      evaluation:
+        m.classification === 'unknown'
+          ? 'n/a'
+          : formatScore(whitePovScore(m.evalAfter, m.side)),
       bestMove: m.bestMoveSan,
       classification: m.classification,
       evalDrop: Math.round(m.evalDrop),
@@ -147,6 +176,25 @@ export async function analyseGame(
 }
 
 // --- helpers ---
+
+/**
+ * Single-PV analysis that returns null (instead of throwing) when the engine
+ * fails — e.g. a timeout or process crash on one position. Lets game analysis
+ * tolerate a bad position instead of aborting the whole game.
+ */
+async function safeAnalyse(
+  engine: UciEngine,
+  fen: string,
+  depth: number
+): Promise<PositionAnalysis | null> {
+  try {
+    return await engine.analyse(fen, depth, 1);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[analyse-game] analysis failed for "${fen}": ${msg}`);
+    return null;
+  }
+}
 
 /** Classify a move based on centipawn loss. */
 function classifyMove(drop: number, isBest: boolean): MoveClassification {
@@ -181,10 +229,12 @@ function winProbability(cp: number): number {
  * large losses. The formula is the Lichess accuracy model.
  */
 function computeAccuracy(moves: MoveAnalysis[]): number {
-  if (moves.length === 0) return 100;
+  // Unanalysed (skipped) moves have no meaningful eval — exclude them.
+  const analysed = moves.filter((m) => m.classification !== 'unknown');
+  if (analysed.length === 0) return 100;
 
   let totalAccuracy = 0;
-  for (const m of moves) {
+  for (const m of analysed) {
     const cpBefore = centipawns(m.evalBefore);
     const cpAfter = centipawns(m.evalAfter);
 
@@ -202,5 +252,5 @@ function computeAccuracy(moves: MoveAnalysis[]): number {
     totalAccuracy += moveAccuracy;
   }
 
-  return totalAccuracy / moves.length;
+  return totalAccuracy / analysed.length;
 }

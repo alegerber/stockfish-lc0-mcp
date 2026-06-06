@@ -69,12 +69,21 @@ export function formatGameAnalysis(analysis: GameAnalysis): string {
   parts.push(`|---|---|---|---|`);
   parts.push(`| White | ${s.whiteBlunders} | ${s.whiteMistakes} | ${s.whiteInaccuracies} |`);
   parts.push(`| Black | ${s.blackBlunders} | ${s.blackMistakes} | ${s.blackInaccuracies} |`);
+  if (s.skippedMoves > 0) {
+    parts.push('');
+    parts.push(`> ⚠ ${s.skippedMoves} move(s) could not be analysed (engine timeout) and were skipped.`);
+  }
   parts.push('');
   parts.push('## Move-by-Move');
 
   for (const m of analysis.moves) {
     const icon = classificationIcon(m.classification);
     const moveNum = m.side === 'white' ? `${m.moveNumber}.` : `${m.moveNumber}...`;
+    if (m.classification === 'unknown') {
+      // Position could not be analysed — don't show a (misleading) eval.
+      parts.push(`${moveNum} ${m.moveSan} ${icon} _(not analysed)_`);
+      continue;
+    }
     const evalStr = formatScore(whitePovScore(m.evalAfter, m.side));
     const bestStr = m.bestMoveSan !== m.moveSan ? ` (best: ${m.bestMoveSan})` : '';
     parts.push(`${moveNum} ${m.moveSan} ${icon} [${evalStr}]${bestStr}`);
@@ -95,6 +104,7 @@ function classificationIcon(c: MoveClassification): string {
     mistake: '?',
     blunder: '??',
     book: '📖',
+    unknown: '—',
   };
   return icons[c] ?? '';
 }

@@ -94,6 +94,7 @@ describe('formatGameAnalysis', () => {
       blackMistakes: 0,
       blackInaccuracies: 0,
       opening: 'King\'s Pawn Opening',
+      skippedMoves: 0,
     },
   };
 

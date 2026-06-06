@@ -192,3 +192,78 @@ describe('analyseGame — evaluation display (White POV normalisation)', () => {
     expect(result.text).not.toContain('-M0');
   });
 });
+
+describe('analyseGame — engine efficiency & resilience', () => {
+  it('analyses each position only once (no redundant double analysis)', async () => {
+    let calls = 0;
+    const engine: UciEngine = {
+      displayName: 'Counter',
+      init: vi.fn(),
+      bestMove: vi.fn(async () => 'e2e4'),
+      quit: vi.fn(),
+      analyse: vi.fn(async (fen: string, depth: number) => {
+        calls++;
+        return {
+          fen, bestMove: 'e2e4', evaluation: { type: 'cp' as const, value: 20 }, depth,
+          lines: [{ depth, score: { type: 'cp' as const, value: 20 }, pv: ['e2e4'], pvSan: [], nodes: 1, nps: 1, time: 1, multipv: 1 }],
+        } satisfies PositionAnalysis;
+      }),
+    };
+    // 4 half-moves → start position + one analysis per move = 5 (NOT 1 + 2*4 = 9).
+    await analyseGame(engine, '1. e4 e5 2. Nf3 Nc6', 20);
+    expect(calls).toBe(5);
+  });
+
+  it('marks a move unanalysed when its engine analysis fails, and continues', async () => {
+    let call = 0;
+    const engine: UciEngine = {
+      displayName: 'Flaky',
+      init: vi.fn(),
+      bestMove: vi.fn(async () => 'e2e4'),
+      quit: vi.fn(),
+      analyse: vi.fn(async (fen: string, depth: number) => {
+        call++;
+        if (call === 3) throw new Error('Timeout waiting for "bestmove" after 120000ms');
+        return {
+          fen, bestMove: 'e2e4', evaluation: { type: 'cp' as const, value: 20 }, depth,
+          lines: [{ depth, score: { type: 'cp' as const, value: 20 }, pv: ['e2e4'], pvSan: [], nodes: 1, nps: 1, time: 1, multipv: 1 }],
+        } satisfies PositionAnalysis;
+      }),
+    };
+    // Must NOT throw — one failed position is tolerated.
+    const result = await analyseGame(engine, '1. e4 e5 2. Nf3 Nc6', 20);
+    const summary = result.json.summary as Record<string, unknown>;
+    expect(summary.skippedMoves).toBeGreaterThanOrEqual(1);
+
+    const moves = result.json.moves as Array<{ classification: string }>;
+    expect(moves).toHaveLength(4); // every move is still listed
+    expect(moves.some((m) => m.classification === 'unknown')).toBe(true);
+  });
+
+  it('keeps the eval perspective correct for the move after a skip (asymmetric)', async () => {
+    // White is a steady +2.00 (side-to-move POV: white +200, black -200).
+    // The analysis after 1...e5 fails → that move is skipped; the FOLLOWING move
+    // (2. Nf3) must still be scored in the right frame, not with an inverted sign.
+    let call = 0;
+    const engine: UciEngine = {
+      displayName: 'AsymFlaky',
+      init: vi.fn(),
+      bestMove: vi.fn(async () => 'e2e4'),
+      quit: vi.fn(),
+      analyse: vi.fn(async (fen: string, depth: number) => {
+        call++;
+        if (call === 3) throw new Error('Timeout waiting for "bestmove"');
+        const value = fen.split(' ')[1] === 'w' ? 200 : -200;
+        return {
+          fen, bestMove: 'e2e4', evaluation: { type: 'cp' as const, value }, depth,
+          lines: [{ depth, score: { type: 'cp' as const, value }, pv: ['e2e4'], pvSan: [], nodes: 1, nps: 1, time: 1, multipv: 1 }],
+        } satisfies PositionAnalysis;
+      }),
+    };
+    const result = await analyseGame(engine, '1. e4 e5 2. Nf3', 20);
+    const moves = result.json.moves as Array<{ classification: string; evalDrop: number }>;
+    expect(moves[1].classification).toBe('unknown'); // 1...e5 was skipped
+    // 2. Nf3 holds White's +2.00 → drop ≈ 0, NOT a large negative (inverted POV).
+    expect(moves[2].evalDrop).toBe(0);
+  });
+});

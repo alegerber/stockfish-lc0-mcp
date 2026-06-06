@@ -72,7 +72,10 @@ export type MoveClassification =
   | 'inaccuracy'
   | 'mistake'
   | 'blunder'
-  | 'book';
+  | 'book'
+  // Position could not be analysed (engine timeout/crash); excluded from
+  // accuracy and error counts.
+  | 'unknown';
 
 export interface GameAnalysis {
   moves: MoveAnalysis[];
@@ -90,6 +93,8 @@ export interface GameSummary {
   blackMistakes: number;
   blackInaccuracies: number;
   opening: string;
+  /** Moves whose engine analysis failed (timeout/crash) and were skipped. */
+  skippedMoves: number;
 }
 
 export interface OpeningInfo {
