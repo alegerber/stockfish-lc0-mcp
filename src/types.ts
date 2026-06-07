@@ -107,6 +107,7 @@ export interface OpeningInfo {
 export interface TacticPuzzle {
   [key: string]: unknown;
   fen: string;
+  hasTactic: boolean;
   solution: string[];
   solutionSan: string[];
   theme: string;

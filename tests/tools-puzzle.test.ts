@@ -78,24 +78,24 @@ describe('generatePuzzle', () => {
     expect(result.json.difficulty).toBe('easy');
   });
 
-  it('classifies medium when advantage is 201–500 cp', async () => {
+  it('classifies medium when the gap is 301–500 cp', async () => {
     const lines: UciLine[] = [
-      { ...twoLines[0], score: { type: 'cp', value: 400 } },
+      { ...twoLines[0], score: { type: 'cp', value: 550 } },
       { ...twoLines[1], score: { type: 'cp', value: 150 } },
     ];
     const engine = makeEngine(lines);
     const result = await generatePuzzle(engine, START_FEN, 20);
-    expect(result.json.difficulty).toBe('medium'); // advantage = 250
+    expect(result.json.difficulty).toBe('medium'); // gap = 400
   });
 
-  it('classifies hard when advantage <= 200 cp', async () => {
+  it('classifies hard when the gap is 150–300 cp', async () => {
     const lines: UciLine[] = [
       { ...twoLines[0], score: { type: 'cp', value: 300 } },
       { ...twoLines[1], score: { type: 'cp', value: 150 } },
     ];
     const engine = makeEngine(lines);
     const result = await generatePuzzle(engine, START_FEN, 20);
-    expect(result.json.difficulty).toBe('hard'); // advantage = 150
+    expect(result.json.difficulty).toBe('hard'); // gap = 150
   });
 
   it('detects mate theme when score type is mate', async () => {
@@ -121,7 +121,8 @@ describe('generatePuzzle', () => {
       ...twoLines[0],
       pv: ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'f8c5', 'b1c3'],
     };
-    const engine = makeEngine([longPvLine]);
+    // Two lines with a clear gap so the gate passes and a solution is produced.
+    const engine = makeEngine([longPvLine, twoLines[1]]);
     const result = await generatePuzzle(engine, START_FEN, 20);
     const solution = result.json.solution as string[];
     expect(solution.length).toBeLessThanOrEqual(5);
@@ -139,5 +140,71 @@ describe('generatePuzzle', () => {
     expect(result.text).toContain('easy');
     expect(result.text).toContain(START_FEN);
     expect(result.text).toContain('Solution');
+  });
+});
+
+describe('generatePuzzle — tactic gate & output format', () => {
+  it('returns a no-tactic result for a quiet position (gap below threshold)', async () => {
+    const quiet: UciLine[] = [
+      { ...twoLines[0], score: { type: 'cp', value: 80 } },
+      { ...twoLines[1], score: { type: 'cp', value: 50 } }, // gap 30 < 150
+    ];
+    const engine = makeEngine(quiet);
+    const result = await generatePuzzle(engine, START_FEN, 20);
+    expect(result.json.hasTactic).toBe(false);
+    expect(result.text).toContain('No clear tactic');
+    expect(result.json).not.toHaveProperty('solution');
+  });
+
+  it('returns a no-tactic result when only one (non-mate) line exists', async () => {
+    const single: UciLine[] = [{ ...twoLines[0], score: { type: 'cp', value: 120 } }];
+    const engine = makeEngine(single);
+    const result = await generatePuzzle(engine, START_FEN, 20);
+    expect(result.json.hasTactic).toBe(false);
+  });
+
+  it('still makes a puzzle for a forced mate even with a single line', async () => {
+    const mate: UciLine[] = [{ ...twoLines[0], score: { type: 'mate', value: 2 } }];
+    const engine = makeEngine(mate);
+    const result = await generatePuzzle(engine, START_FEN, 20);
+    expect(result.json.hasTactic).toBe(true);
+    expect(result.json.theme).toContain('Mate');
+  });
+
+  it('makes a puzzle at the gate boundary (gap == 150)', async () => {
+    const boundary: UciLine[] = [
+      { ...twoLines[0], score: { type: 'cp', value: 200 } },
+      { ...twoLines[1], score: { type: 'cp', value: 50 } }, // gap exactly 150
+    ];
+    const engine = makeEngine(boundary);
+    const result = await generatePuzzle(engine, START_FEN, 20);
+    expect(result.json.hasTactic).toBe(true);
+    expect(result.json).toHaveProperty('solution');
+  });
+
+  it('marks solver moves in bold and wraps the solution in a <details> spoiler', async () => {
+    const engine = makeEngine(twoLines); // pv e2e4 e7e5 → e4 (solver) e5 (opponent)
+    const result = await generatePuzzle(engine, START_FEN, 20);
+    expect(result.text).toContain('<details>');
+    expect(result.text).toContain('<summary>Solution</summary>');
+    expect(result.text).toContain('**e4**'); // solver move bolded
+    expect(result.text).not.toContain('||'); // no Discord spoiler syntax
+  });
+
+  it('treats a position where the side to move is being mated as no tactic', async () => {
+    // best line is a mate AGAINST the mover (negative) — a lost position, not a puzzle
+    const losing: UciLine[] = [{ ...twoLines[0], score: { type: 'mate', value: -3 } }];
+    const result = await generatePuzzle(makeEngine(losing), START_FEN, 20);
+    expect(result.json.hasTactic).toBe(false);
+    expect(result.json).not.toHaveProperty('solution');
+    expect(result.text).not.toContain('Mate in 3');
+  });
+
+  it('does not reveal the theme in the visible header (it lives inside the spoiler)', async () => {
+    const mate: UciLine[] = [{ ...twoLines[0], score: { type: 'mate', value: 1 } }];
+    const result = await generatePuzzle(makeEngine(mate), START_FEN, 20);
+    const header = result.text.split('<details>')[0];
+    expect(header).not.toContain('Mate'); // theme not leaked before the spoiler
+    expect(result.text).toContain('Mate in 1'); // but present inside it
   });
 });
