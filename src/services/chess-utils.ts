@@ -1,31 +1,49 @@
 // Chess utility service wrapping chess.js
 import { Chess } from 'chess.js';
 import type { OpeningInfo } from '../types.js';
+import { OPENING_BOOK } from './openings-data.js';
 
-// Bundled ECO opening book (A–E codes, most common lines).
-// Kept small to stay self-contained; extend via external DB if desired.
-const OPENING_BOOK: OpeningInfo[] = [
-  { eco: 'A00', name: 'Uncommon Opening', pgn: '1. a3', fen: 'rnbqkbnr/pppppppp/8/8/8/P7/1PPPPPPP/RNBQKBNR b KQkq - 0 1' },
-  { eco: 'A04', name: 'Reti Opening', pgn: '1. Nf3', fen: 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1' },
-  { eco: 'A10', name: 'English Opening', pgn: '1. c4', fen: 'rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b KQkq - 0 1' },
-  { eco: 'A45', name: "Queen's Pawn Game", pgn: '1. d4', fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1' },
-  { eco: 'B00', name: "King's Pawn Opening", pgn: '1. e4', fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1' },
-  { eco: 'B01', name: 'Scandinavian Defense', pgn: '1. e4 d5', fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-  { eco: 'B10', name: 'Caro-Kann Defense', pgn: '1. e4 c6', fen: 'rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-  { eco: 'B20', name: 'Sicilian Defense', pgn: '1. e4 c5', fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-  { eco: 'C00', name: 'French Defense', pgn: '1. e4 e6', fen: 'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-  { eco: 'C20', name: "King's Pawn Game", pgn: '1. e4 e5', fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-  { eco: 'C20', name: 'Wayward Queen Attack', pgn: '1. e4 e5 2. Qh5', fen: 'rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2' },
-  { eco: 'C44', name: "King's Pawn Game: Scotch", pgn: '1. e4 e5 2. Nf3 Nc6 3. d4', fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3' },
-  { eco: 'C50', name: 'Italian Game', pgn: '1. e4 e5 2. Nf3 Nc6 3. Bc4', fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3' },
-  { eco: 'C57', name: 'Italian Game: Fried Liver', pgn: '1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Ng5 d5 5. exd5 Nxd5 6. Nxf7', fen: 'r1bqkb1r/ppp2Npp/2n5/3np3/2B5/8/PPPP1PPP/RNBQK2R b KQkq - 0 6' },
-  { eco: 'C60', name: 'Ruy Lopez', pgn: '1. e4 e5 2. Nf3 Nc6 3. Bb5', fen: 'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3' },
-  { eco: 'D00', name: 'London System', pgn: '1. d4 d5 2. Bf4', fen: 'rnbqkbnr/ppp1pppp/8/3p4/3P1B2/8/PPP1PPPP/RN1QKBNR b KQkq - 1 2' },
-  { eco: 'D06', name: "Queen's Gambit", pgn: '1. d4 d5 2. c4', fen: 'rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2' },
-  { eco: 'D30', name: "Queen's Gambit Declined", pgn: '1. d4 d5 2. c4 e6', fen: 'rnbqkbnr/ppp2ppp/4p3/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 3' },
-  { eco: 'D35', name: "Queen's Gambit Declined: Exchange", pgn: '1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. cxd5 exd5', fen: 'rnbqkb1r/ppp2ppp/5n2/3p4/3P4/2N5/PP2PPPP/R1BQKBNR w KQkq - 0 5' },
-  { eco: 'E00', name: 'Catalan Opening', pgn: '1. d4 Nf6 2. c4 e6 3. g3', fen: 'rnbqkb1r/pppp1ppp/4pn2/8/2PP4/6P1/PP2PP1P/RNBQKBNR b KQkq - 0 3' },
-];
+/**
+ * Does the side to move have a legal en-passant capture in this position?
+ * chess.js writes an en-passant target square on every double pawn push, even
+ * when no capture is actually available, so we only treat the ep square as part
+ * of a position's identity when a capture truly exists.
+ */
+function hasEnPassantCapture(fen: string): boolean {
+  try {
+    return new Chess(fen).moves({ verbose: true }).some((m) => m.isEnPassant());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Position-identity key for opening matching: piece placement + side to move +
+ * castling rights + en passant — but the en-passant square is kept ONLY when an
+ * en-passant capture is actually legal, and the halfmove/fullmove counters are
+ * dropped entirely. This lets transpositions (the same position reached via a
+ * different move order) share a key, while still distinguishing two positions
+ * that differ only by a real, available en-passant capture (e.g. the King's
+ * Gambit Mason-Keres Gambit vs the Van Geet Nowokunski Gambit, which share a
+ * placement but not ep legality).
+ */
+function positionKey(fen: string): string {
+  const [placement, side, castling, ep] = fen.split(' ');
+  const epKey = ep && ep !== '-' && hasEnPassantCapture(fen) ? ep : '-';
+  return `${placement} ${side} ${castling} ${epKey}`;
+}
+
+// Index every book position by its key once, so runtime lookup is an O(1) Map
+// hit per ply instead of a linear scan of the whole book. First entry wins on
+// the rare key collision (the dataset is already de-duplicated by position).
+const BOOK_INDEX: Map<string, OpeningInfo> = (() => {
+  const m = new Map<string, OpeningInfo>();
+  for (const entry of OPENING_BOOK) {
+    const key = positionKey(entry.fen);
+    if (!m.has(key)) m.set(key, entry);
+  }
+  return m;
+})();
 
 /**
  * Parse a PGN string and return the list of moves + final FEN.
@@ -122,39 +140,88 @@ export function uciToSan(fen: string, uci: string): string {
   }
 }
 
-/** Look up the opening name for a list of SAN moves. */
-export function lookupOpening(moves: string[]): OpeningInfo | null {
-  // Build progressive PGN and match against book
-  let bestMatch: OpeningInfo | null = null;
-  let bestLength = 0;
-
-  for (const entry of OPENING_BOOK) {
-    const bookMoves = pgnToMoveList(entry.pgn);
-    if (bookMoves.length > moves.length) continue;
-
-    let match = true;
-    for (let i = 0; i < bookMoves.length; i++) {
-      if (bookMoves[i] !== moves[i]) {
-        match = false;
-        break;
-      }
+/**
+ * Replay SAN moves from the initial position and return the FEN after each ply.
+ * Stops at the first move chess.js rejects, returning the FENs collected so far.
+ */
+function fensFromSanMoves(moves: string[]): string[] {
+  const chess = new Chess();
+  const fens: string[] = [];
+  for (const san of moves) {
+    try {
+      chess.move(san);
+    } catch {
+      break;
     }
-
-    if (match && bookMoves.length > bestLength) {
-      bestMatch = entry;
-      bestLength = bookMoves.length;
-    }
+    fens.push(chess.fen());
   }
-
-  return bestMatch;
+  return fens;
 }
 
-/** Search openings by name or ECO code. */
+/**
+ * Find the most specific known opening for a sequence of positions (one FEN per
+ * ply). Returns:
+ *   - `opening`: the deepest in-book position reached — the most specific name —
+ *      even if it was reached via a transposition.
+ *   - `bookDepth`: the length of the CONTIGUOUS leading run of in-book plies,
+ *      i.e. how far the game followed theory before its first deviation. The
+ *      book stores only named nodes, so a move that leaves book and later
+ *      transposes back into a named line must NOT be credited as theory — hence
+ *      we stop counting at the first out-of-book ply rather than at the deepest
+ *      match.
+ * Returns null if no position is in the book. Position-based, so it recognises
+ * an opening regardless of move order.
+ */
+export function detectOpening(
+  fens: string[]
+): { opening: OpeningInfo; bookDepth: number } | null {
+  let opening: OpeningInfo | null = null; // deepest in-book position → name
+  let bookDepth = 0; // contiguous in-book prefix length → 'book' labelling
+  let contiguous = true;
+  for (let i = 0; i < fens.length; i++) {
+    const entry = BOOK_INDEX.get(positionKey(fens[i]));
+    if (entry) {
+      opening = entry;
+      if (contiguous) bookDepth = i + 1;
+    } else {
+      contiguous = false;
+    }
+  }
+  return opening ? { opening, bookDepth } : null;
+}
+
+/** Look up the opening for a list of SAN moves (transposition-aware). */
+export function lookupOpening(moves: string[]): OpeningInfo | null {
+  const detected = detectOpening(fensFromSanMoves(moves));
+  return detected ? detected.opening : null;
+}
+
+/**
+ * Search openings by name or ECO code, ranked most-relevant first: an exact ECO
+ * match, then a name-prefix match, then shorter (more canonical / main-line)
+ * variations. Returns ALL matches sorted — the caller decides how many to show.
+ */
 export function searchOpenings(query: string): OpeningInfo[] {
-  const q = query.toLowerCase();
-  return OPENING_BOOK.filter(
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+
+  const matches = OPENING_BOOK.filter(
     (o) => o.name.toLowerCase().includes(q) || o.eco.toLowerCase().includes(q)
   );
+
+  return matches.sort((a, b) => {
+    const ecoRank = (o: OpeningInfo): number => (o.eco.toLowerCase() === q ? 0 : 1);
+    if (ecoRank(a) !== ecoRank(b)) return ecoRank(a) - ecoRank(b);
+
+    const nameRank = (o: OpeningInfo): number => (o.name.toLowerCase().startsWith(q) ? 0 : 1);
+    if (nameRank(a) !== nameRank(b)) return nameRank(a) - nameRank(b);
+
+    const lenA = pgnToMoveList(a.pgn).length;
+    const lenB = pgnToMoveList(b.pgn).length;
+    if (lenA !== lenB) return lenA - lenB;
+
+    return a.name.localeCompare(b.name);
+  });
 }
 
 /** Extract a flat list of SAN moves from a short PGN (no headers). */

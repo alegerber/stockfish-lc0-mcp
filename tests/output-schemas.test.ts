@@ -97,7 +97,10 @@ describe('tool structuredContent validates against its declared outputSchema (#1
     expect(yes.json.identified).toBe(true);
     expectValid(IdentifyOpeningOutput, yes.json);
 
-    const no = identifyOpeningFromPgn('1. Na3 Nh6 2. Nb1 Ng8');
+    // Almost every legal first move is now a named opening, so the only
+    // not-identified path is input with no legal replay. The tokens still
+    // populate the optional `moves` field of the not-identified variant.
+    const no = identifyOpeningFromPgn('not a real opening');
     expect(no.json.identified).toBe(false); // exercises the optional `moves` field
     expectValid(IdentifyOpeningOutput, no.json);
   });

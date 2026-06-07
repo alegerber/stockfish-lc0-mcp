@@ -13,13 +13,19 @@ export function lookupOpeningByQuery(
     };
   }
 
-  const lines = results.map(
+  // The book has thousands of lines, so a broad query ("Sicilian") can match
+  // hundreds. Show the top-ranked slice but report the true total in `count`.
+  const DISPLAY_LIMIT = 25;
+  const shown = results.slice(0, DISPLAY_LIMIT);
+  const more = results.length > shown.length ? ` (showing first ${shown.length})` : '';
+
+  const lines = shown.map(
     (o) => `**${o.eco} – ${o.name}**\nMoves: ${o.pgn}\nFEN: \`${o.fen}\``
   );
 
   return {
-    text: `Found ${results.length} opening(s) for "${query}":\n\n${lines.join('\n\n')}`,
-    json: { query, count: results.length, results },
+    text: `Found ${results.length} opening(s) for "${query}"${more}:\n\n${lines.join('\n\n')}`,
+    json: { query, count: results.length, results: shown },
   };
 }
 

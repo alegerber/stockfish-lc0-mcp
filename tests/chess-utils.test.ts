@@ -66,13 +66,50 @@ describe('lookupOpening', () => {
     expect(result?.name).toBe('Ruy Lopez');
   });
 
-  it('returns null for unknown move sequences', () => {
-    // b4 is not in the opening book
-    expect(lookupOpening(['b4', 'e5'])).toBeNull();
+  it('returns null for an unrecognised (illegal) move token', () => {
+    // No legal replay → no positions to match → null (and no crash).
+    expect(lookupOpening(['notamove'])).toBeNull();
   });
 
   it('returns null for an empty move list', () => {
     expect(lookupOpening([])).toBeNull();
+  });
+
+  // ── Coverage gaps the expanded book closes (issue #48) ──────────────────
+  it('identifies the Ruy Lopez Morphy Defence (C70) one ply deeper than C60', () => {
+    const result = lookupOpening(['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6']);
+    expect(result?.eco).toBe('C70');
+    expect(result?.name).toContain('Morphy');
+  });
+
+  it("identifies the King's Indian main line as E-code, not a shallow Queen's Pawn match", () => {
+    const result = lookupOpening(['d4', 'Nf6', 'c4', 'g6', 'Nc3', 'Bg7', 'e4', 'd6']);
+    expect(result?.eco?.[0]).toBe('E');
+    expect(result?.name).toContain("King's Indian");
+  });
+
+  it("names 1.e4 e5 2.Bc4 the Bishop's Opening, not a generic King's Pawn Game", () => {
+    const result = lookupOpening(['e4', 'e5', 'Bc4']);
+    expect(result?.name).toBe("Bishop's Opening");
+  });
+
+  // ── Transposition-robust (position-based) matching (issue #49) ──────────
+  it('matches the same opening regardless of move order (transposition)', () => {
+    const direct = lookupOpening(['d4', 'd5', 'c4']); // Queen's Gambit, direct order
+    const transposed = lookupOpening(['c4', 'd5', 'd4']); // same position, other order
+    expect(direct).not.toBeNull();
+    expect(transposed?.eco).toBe(direct?.eco);
+    expect(transposed?.name).toBe(direct?.name);
+  });
+
+  it('keeps en-passant-distinct positions separate (Mason-Keres C33 vs Van Geet A00)', () => {
+    // Same piece placement, but ep is legal on only one path — they are genuinely
+    // different positions and must not collapse to one entry (review finding).
+    const masonKeres = lookupOpening(['e4', 'e5', 'f4', 'exf4', 'Nc3']); // ep not available
+    const vanGeet = lookupOpening(['Nc3', 'e5', 'f4', 'exf4', 'e4']); // ...fxe3 e.p. legal
+    expect(masonKeres?.eco).toBe('C33');
+    expect(vanGeet?.eco).toBe('A00');
+    expect(masonKeres?.eco).not.toBe(vanGeet?.eco);
   });
 });
 
@@ -91,6 +128,17 @@ describe('searchOpenings', () => {
 
   it('returns an empty array for no match', () => {
     expect(searchOpenings('zzznomatch')).toHaveLength(0);
+  });
+
+  it("finds the King's Indian Defense by name (absent from the old 20-entry book)", () => {
+    const results = searchOpenings("King's Indian");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some((o) => o.eco.startsWith('E'))).toBe(true);
+  });
+
+  it('ranks an exact ECO match first', () => {
+    const results = searchOpenings('C50');
+    expect(results[0].eco).toBe('C50');
   });
 });
 
