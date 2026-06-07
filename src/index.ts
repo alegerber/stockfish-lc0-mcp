@@ -5,6 +5,7 @@ import { StockfishEngine, Lc0Engine } from './services/engine.js';
 import {
   AnalysePositionSchema,
   AnalyseGameSchema,
+  Lc0AnalyseGameSchema,
   LookupOpeningSchema,
   IdentifyOpeningSchema,
   GeneratePuzzleSchema,
@@ -334,7 +335,7 @@ Higher depth values use more nodes and take longer.
 
 Args:
   - pgn (string): Complete PGN of the game
-  - depth (number): Search strength per move 1–30 (mapped to nodes; default 22)
+  - depth (number): Search strength per move 1–30 (mapped to nodes; default 10 — Lc0 on CPU is slow, raise for higher fidelity)
 
 Returns:
   Opening name, accuracy %, error summary table, move-by-move analysis
@@ -343,7 +344,7 @@ Returns:
 Examples:
   - "Analyse this game with Lc0: 1. e4 e5 2. Nf3 Nc6 ..."
   - "Get the neural network's take on my game [PGN]"`,
-      inputSchema: AnalyseGameSchema,
+      inputSchema: Lc0AnalyseGameSchema,
       outputSchema: AnalyseGameOutput,
       annotations: {
         readOnlyHint: true,
