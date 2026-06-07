@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP server wrapping UCI chess engines (Stockfish and Leela Chess Zero). Provides 8 tools for chess analysis over the Model Context Protocol stdio transport. Written in TypeScript (strict mode), runs on Node.js 24+, deployed via Docker.
+MCP server wrapping UCI chess engines (Stockfish and Leela Chess Zero). Provides 8 tools for chess analysis over the Model Context Protocol stdio transport. Written in TypeScript (strict mode), runs on Node.js 22+ (CI-tested on LTS 22/24/26), deployed via Docker.
 
 Both engines are enabled by default in Docker. Lc0 ships with the Maia-1900 neural network and uses the OpenBLAS CPU backend. Stockfish tools (`sf_*`) are always available. Lc0 tools (`lc0_*`) are conditionally registered when `LC0_WEIGHTS_PATH` is set (enabled by default in Docker).
 
@@ -112,7 +112,7 @@ ESM throughout. All local imports use `.js` extensions (e.g., `'./services/engin
 
 3. **Dynamic imports**: Do not use `await import('chess.js')` inside loops. Use static imports at module top.
 
-4. **Docker binary path**: The Debian `stockfish` package installs to `/usr/games/stockfish`, which is not on the default PATH in `node:24-slim`. `STOCKFISH_PATH` must be the absolute path.
+4. **Docker binary path**: The Debian `stockfish` package installs to `/usr/games/stockfish`, which is not on the default PATH in `node:24-slim`. `STOCKFISH_PATH` must be the absolute path. (The image pins `node:24-slim`; the *supported* floor is Node 22 — the published image just fixes one line.)
 
 5. **Terminal positions**: The engine cannot meaningfully analyse checkmate/stalemate positions. Detect these with `chess.js` before calling `engine.analyse()`.
 
