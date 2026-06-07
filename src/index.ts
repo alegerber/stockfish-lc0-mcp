@@ -222,7 +222,8 @@ Args:
 
 Returns:
   Puzzle FEN, theme (e.g. "Mate in 3", "Fork", "Pin"), difficulty,
-  solution in UCI and SAN, and an explanation.
+  solution in UCI and SAN, and an explanation. If the position has no clear
+  tactic, returns hasTactic:false with the best move instead of a puzzle.
 
 Examples:
   - "Make a puzzle from this position: [FEN]"
@@ -337,6 +338,7 @@ Args:
 
 Returns:
   Puzzle FEN, theme, difficulty, solution in UCI and SAN, and explanation.
+  If there is no clear tactic, returns hasTactic:false with the best move.
 
 Examples:
   - "Make a puzzle with Lc0 from this position: [FEN]"
