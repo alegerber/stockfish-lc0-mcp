@@ -43,7 +43,7 @@ docker compose up --build
 
 ### Option 2: Local Node.js
 
-Prerequisites: Node.js 22+, Stockfish binary installed.
+Prerequisites: Node.js 24+, Stockfish binary installed.
 
 ```bash
 # Install Stockfish
@@ -188,7 +188,7 @@ Both engines implement the `UciEngine` interface and are interchangeable at the 
 ```bash
 npm install          # Install dependencies
 npm run build        # Compile TypeScript → dist/
-npm test             # Run unit tests (Vitest, ~125 tests)
+npm test             # Run unit tests (Vitest, 150+ tests)
 npm run lint         # ESLint
 ```
 
