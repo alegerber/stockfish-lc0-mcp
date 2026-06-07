@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   AnalysePositionSchema,
   AnalyseGameSchema,
+  Lc0AnalyseGameSchema,
   LookupOpeningSchema,
   IdentifyOpeningSchema,
   GeneratePuzzleSchema,
 } from '../src/schemas/index.js';
-import { MAX_DEPTH, MAX_MULTI_PV } from '../src/constants.js';
+import { MAX_DEPTH, MAX_MULTI_PV, LC0_GAME_DEFAULT_DEPTH, LC0_DEPTH_TO_NODES } from '../src/constants.js';
 
 const VALID_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const VALID_PGN = '1. e4 e5';
@@ -123,5 +124,21 @@ describe('GeneratePuzzleSchema', () => {
   it('rejects depth above MAX_DEPTH', () => {
     const result = GeneratePuzzleSchema.safeParse({ fen: VALID_FEN, depth: MAX_DEPTH + 1 });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('Lc0AnalyseGameSchema (#12 M2 — lower Lc0 game default)', () => {
+  it('defaults depth to LC0_GAME_DEFAULT_DEPTH, below the Stockfish game default', () => {
+    expect(Lc0AnalyseGameSchema.parse({ pgn: VALID_PGN }).depth).toBe(LC0_GAME_DEFAULT_DEPTH);
+    expect(LC0_GAME_DEFAULT_DEPTH).toBeLessThan(AnalyseGameSchema.parse({ pgn: VALID_PGN }).depth);
+  });
+
+  it('maps that default to a modest per-position node budget (avoids CPU timeouts)', () => {
+    expect(LC0_DEPTH_TO_NODES[LC0_GAME_DEFAULT_DEPTH]).toBeLessThanOrEqual(20_000);
+  });
+
+  it('still honours an explicit depth and the MAX_DEPTH bound', () => {
+    expect(Lc0AnalyseGameSchema.parse({ pgn: VALID_PGN, depth: 18 }).depth).toBe(18);
+    expect(Lc0AnalyseGameSchema.safeParse({ pgn: VALID_PGN, depth: MAX_DEPTH + 1 }).success).toBe(false);
   });
 });
