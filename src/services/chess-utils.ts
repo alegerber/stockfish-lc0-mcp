@@ -157,11 +157,6 @@ export function searchOpenings(query: string): OpeningInfo[] {
   );
 }
 
-/** Get all openings in the book. */
-export function getAllOpenings(): OpeningInfo[] {
-  return [...OPENING_BOOK];
-}
-
 /** Extract a flat list of SAN moves from a short PGN (no headers). */
 export function pgnToMoveList(pgn: string): string[] {
   return pgn
