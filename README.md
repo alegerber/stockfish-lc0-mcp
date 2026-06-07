@@ -43,7 +43,7 @@ docker compose up --build
 
 ### Option 2: Local Node.js
 
-Prerequisites: Node.js 24+, Stockfish binary installed.
+Prerequisites: Node.js 22+ (CI-tested on LTS 22, 24, 26), Stockfish binary installed.
 
 ```bash
 # Install Stockfish

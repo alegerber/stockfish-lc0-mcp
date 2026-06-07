@@ -12,14 +12,19 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Maintained Node LTS lines (22 Maintenance, 24 Active, 26 from Oct 2026).
+        node: ['22', '24', '26']
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
+      - name: Set up Node.js ${{ matrix.node }}
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: ${{ matrix.node }}
           cache: 'npm'
 
       - name: Install dependencies
