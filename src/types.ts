@@ -64,15 +64,13 @@ export interface MoveAnalysis {
 }
 
 export type MoveClassification =
-  | 'brilliant'
-  | 'great'
+  | 'book'
   | 'best'
   | 'excellent'
   | 'good'
   | 'inaccuracy'
   | 'mistake'
   | 'blunder'
-  | 'book'
   // Position could not be analysed (engine timeout/crash); excluded from
   // accuracy and error counts.
   | 'unknown';

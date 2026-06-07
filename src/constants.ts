@@ -22,7 +22,10 @@ export const BLUNDER_THRESHOLD = 200;
 export const MISTAKE_THRESHOLD = 100;
 export const INACCURACY_THRESHOLD = 50;
 export const GOOD_THRESHOLD = 20;
-export const EXCELLENT_THRESHOLD = 10;
+
+// Cap for the reported per-move evalDrop. Beyond this the move is already
+// decisive; the exact figure (e.g. a mate-boundary ~10000) would only be noise.
+export const MAX_REPORTED_DROP = 1000;
 
 // Starting position FEN
 export const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';

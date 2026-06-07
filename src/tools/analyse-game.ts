@@ -1,9 +1,9 @@
 // Tool: Analyse a full game from PGN
 import type { UciEngine, MoveAnalysis, MoveClassification, GameAnalysis, UciScore, PositionAnalysis } from '../types.js';
 import { centipawns } from '../types.js';
-import { parsePgn, uciToSan, lookupOpening, isGameOver } from '../services/chess-utils.js';
+import { parsePgn, uciToSan, lookupOpening, isGameOver, pgnToMoveList } from '../services/chess-utils.js';
 import { formatGameAnalysis, formatScore, whitePovScore, negateScore } from '../services/formatting.js';
-import { START_FEN, BLUNDER_THRESHOLD, MISTAKE_THRESHOLD, INACCURACY_THRESHOLD, GOOD_THRESHOLD, EXCELLENT_THRESHOLD } from '../constants.js';
+import { START_FEN, BLUNDER_THRESHOLD, MISTAKE_THRESHOLD, INACCURACY_THRESHOLD, GOOD_THRESHOLD, MAX_REPORTED_DROP } from '../constants.js';
 
 export async function analyseGame(
   engine: UciEngine,
@@ -24,6 +24,8 @@ export async function analyseGame(
   const sanMoves = moves.map((m) => m.san);
   const opening = lookupOpening(sanMoves);
   const openingName = opening?.name ?? headers['ECO'] ?? 'Unknown';
+  // How many leading moves are still "in book" (theory) — they get the 'book' label.
+  const bookMoveCount = opening ? pgnToMoveList(opening.pgn).length : 0;
 
   // Analyse the starting position once. This analysis is carried forward and
   // reused as the "before" analysis of the next move, so each position is
@@ -91,6 +93,17 @@ export async function analyseGame(
         drop = evalBeforeForMover - evalAfterForMover;
         classification = classifyMove(drop, move.san === bestMoveSan);
       }
+    }
+
+    // Opening-book moves the engine doesn't fault are theory, not engine
+    // decisions — label them 'book'. A move that is actually an error (even a
+    // named book line like the Wayward Queen 2. Qh5) keeps its error label so it
+    // isn't hidden; terminal moves keep their 'best'/mate signal; skipped moves
+    // keep 'unknown'.
+    const bookEligible =
+      classification === 'best' || classification === 'excellent' || classification === 'good';
+    if (i < bookMoveCount && bookEligible && !terminal.over) {
+      classification = 'book';
     }
 
     moveAnalyses.push({
@@ -171,7 +184,7 @@ export async function analyseGame(
           : formatScore(whitePovScore(m.evalAfter, m.side)),
       bestMove: m.bestMoveSan,
       classification: m.classification,
-      evalDrop: Math.round(m.evalDrop),
+      evalDrop: Math.round(Math.max(-MAX_REPORTED_DROP, Math.min(MAX_REPORTED_DROP, m.evalDrop))),
     })),
   };
 
@@ -208,8 +221,7 @@ function classifyMove(drop: number, isBest: boolean): MoveClassification {
   if (drop >= MISTAKE_THRESHOLD) return 'mistake';
   if (drop >= INACCURACY_THRESHOLD) return 'inaccuracy';
   if (drop >= GOOD_THRESHOLD) return 'good';
-  if (drop >= EXCELLENT_THRESHOLD) return 'excellent';
-  return 'great';
+  return 'excellent'; // negligible or negative loss
 }
 
 /** Count errors of a given classification for a side. */

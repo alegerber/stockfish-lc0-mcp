@@ -149,7 +149,7 @@ Args:
 
 Returns:
   Opening name, accuracy %, error summary table, move-by-move analysis
-  with classification (best/great/excellent/good/inaccuracy/mistake/blunder).
+  with classification (book/best/excellent/good/inaccuracy/mistake/blunder).
 
 Examples:
   - "Analyse this game: 1. e4 e5 2. Nf3 Nc6 ..."
@@ -327,7 +327,7 @@ Args:
 
 Returns:
   Opening name, accuracy %, error summary table, move-by-move analysis
-  with classification (best/great/excellent/good/inaccuracy/mistake/blunder).
+  with classification (book/best/excellent/good/inaccuracy/mistake/blunder).
 
 Examples:
   - "Analyse this game with Lc0: 1. e4 e5 2. Nf3 Nc6 ..."
