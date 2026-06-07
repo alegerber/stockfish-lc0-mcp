@@ -29,13 +29,11 @@ export async function generatePuzzle(
   const sideToMove = fen.split(' ')[1] === 'b' ? 'Black' : 'White';
   const bestMoveSan = uciSequenceToSan(fen, bestLine.pv.slice(0, 1))[0] ?? bestLine.pv[0] ?? '';
 
-  // Gate: is there actually a tactic? A forced mate always qualifies. Otherwise
-  // the best move must be clearly better than the second-best (a real "only
-  // move" gap) — which needs a second line to measure. A quiet position with no
-  // dominant move is reported as such instead of a fabricated puzzle.
-  // A forced mate FOR the side to move is always a puzzle. A mate AGAINST them
-  // (negative value, or the 0 "already mated" sentinel) is a lost position, not
-  // a puzzle. Otherwise the best move must clearly beat the second-best.
+  // Gate: is there actually a tactic? A forced mate FOR the side to move always
+  // qualifies; a mate AGAINST them (negative, or the 0 "already mated" sentinel)
+  // is a lost position, not a puzzle. Otherwise the best move must clearly beat
+  // the second-best (a real "only move" gap, which needs a second line to
+  // measure). A quiet position is reported as such instead of a fabricated puzzle.
   const winningMate = bestLine.score.type === 'mate' && bestLine.score.value > 0;
   const losingMate = bestLine.score.type === 'mate' && bestLine.score.value <= 0;
   const bestScore = centipawns(bestLine.score);
