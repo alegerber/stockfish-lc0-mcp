@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   AnalysePositionSchema,
   AnalyseGameSchema,
+  Lc0AnalysePositionSchema,
   Lc0AnalyseGameSchema,
   LookupOpeningSchema,
   IdentifyOpeningSchema,
   GeneratePuzzleSchema,
 } from '../src/schemas/index.js';
-import { MAX_DEPTH, MAX_MULTI_PV, LC0_GAME_DEFAULT_DEPTH, LC0_DEPTH_TO_NODES } from '../src/constants.js';
+import { MAX_DEPTH, MAX_MULTI_PV, LC0_GAME_DEFAULT_DEPTH, LC0_POSITION_DEFAULT_DEPTH, LC0_DEPTH_TO_NODES } from '../src/constants.js';
 
 const VALID_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const VALID_PGN = '1. e4 e5';
@@ -50,6 +51,29 @@ describe('AnalysePositionSchema', () => {
   it('rejects unknown extra fields', () => {
     const result = AnalysePositionSchema.safeParse({ fen: VALID_FEN, unknownField: true });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('Lc0AnalysePositionSchema', () => {
+  it('applies the lower Lc0 default depth (CPU-safe), keeping multiPv default', () => {
+    const result = Lc0AnalysePositionSchema.safeParse({ fen: VALID_FEN });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.depth).toBe(LC0_POSITION_DEFAULT_DEPTH);
+      expect(result.data.depth).toBeLessThan(20); // below the Stockfish position default
+      expect(result.data.multiPv).toBe(3);
+    }
+  });
+
+  it('warns about Lc0 CPU cost in the depth description', () => {
+    const depthField = Lc0AnalysePositionSchema.shape.depth;
+    expect(depthField.description).toMatch(/time out|slower|CPU/i);
+  });
+
+  it('still enforces the shared bounds and strictness', () => {
+    expect(Lc0AnalysePositionSchema.safeParse({ fen: VALID_FEN, depth: MAX_DEPTH + 1 }).success).toBe(false);
+    expect(Lc0AnalysePositionSchema.safeParse({ fen: VALID_FEN, multiPv: MAX_MULTI_PV + 1 }).success).toBe(false);
+    expect(Lc0AnalysePositionSchema.safeParse({ fen: VALID_FEN, unknownField: true }).success).toBe(false);
   });
 });
 

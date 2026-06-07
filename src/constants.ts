@@ -16,6 +16,13 @@ export const CHARACTER_LIMIT = 50000;
 // moves. Callers can raise `depth` per request for higher fidelity.
 export const LC0_GAME_DEFAULT_DEPTH = 10;
 
+// Default single-position depth for Lc0. The shared position default (20 →
+// 150k nodes) is slow enough on the OpenBLAS CPU backend to risk a timeout;
+// 12 → 20k nodes keeps a one-shot analysis responsive while staying a bit
+// deeper than the per-move game default (a position is analysed only once).
+// Callers can raise `depth` per request for higher fidelity.
+export const LC0_POSITION_DEFAULT_DEPTH = 12;
+
 // Max time to wait for a single UCI command to complete (handshake or a `go`
 // search). A deep game analysis (depth 22) can be slow, so this is generous;
 // override per deployment via the ENGINE_TIMEOUT_MS env var.
