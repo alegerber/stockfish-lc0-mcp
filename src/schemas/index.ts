@@ -1,6 +1,6 @@
 // Zod input schemas for all tools
 import { z } from 'zod';
-import { MAX_DEPTH, MAX_MULTI_PV, LC0_GAME_DEFAULT_DEPTH } from '../constants.js';
+import { MAX_DEPTH, MAX_MULTI_PV, LC0_GAME_DEFAULT_DEPTH, LC0_POSITION_DEFAULT_DEPTH } from '../constants.js';
 
 export const AnalysePositionSchema = z.object({
   fen: z.string()
@@ -28,6 +28,27 @@ export const AnalyseGameSchema = z.object({
     .max(MAX_DEPTH)
     .default(22)
     .describe('Search depth per move (1–30, default 22). Lower depth = faster.'),
+}).strict();
+
+// Same shape as AnalysePositionSchema, but with an Lc0-appropriate default and
+// a CPU-performance warning. Lc0 runs on the OpenBLAS CPU backend here, so a
+// high depth (e.g. 20 → 150k nodes) can be slow / time out; the default is
+// lowered and the cost is called out so callers opt into deeper searches.
+export const Lc0AnalysePositionSchema = z.object({
+  fen: z.string()
+    .describe('FEN string of the position to analyse'),
+  depth: z.number()
+    .int()
+    .min(1)
+    .max(MAX_DEPTH)
+    .default(LC0_POSITION_DEFAULT_DEPTH)
+    .describe(`Search strength (1–30, default ${LC0_POSITION_DEFAULT_DEPTH} for Lc0; mapped to a node budget). Higher = slower; Lc0 on CPU may time out at high depth.`),
+  multiPv: z.number()
+    .int()
+    .min(1)
+    .max(MAX_MULTI_PV)
+    .default(3)
+    .describe('Number of principal variations to return (1–5, default 3)'),
 }).strict();
 
 // Lc0 reaches its node budget far more slowly than Stockfish reaches a depth,

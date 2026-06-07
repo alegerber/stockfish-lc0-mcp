@@ -5,6 +5,7 @@ import { StockfishEngine, Lc0Engine } from './services/engine.js';
 import {
   AnalysePositionSchema,
   AnalyseGameSchema,
+  Lc0AnalysePositionSchema,
   Lc0AnalyseGameSchema,
   LookupOpeningSchema,
   IdentifyOpeningSchema,
@@ -294,11 +295,17 @@ from traditional alpha-beta engines like Stockfish. Particularly strong at
 positional and strategic evaluation.
 
 Note: The "depth" parameter is mapped to Lc0 node counts internally since
-MCTS depth is not comparable to alpha-beta depth.
+MCTS depth is not comparable to alpha-beta depth. Lc0 runs on the CPU backend
+here, so it is slower than Stockfish — keep the depth low (default 12) for
+responsive analysis; high values may time out.
+
+Note: each returned line's "depth" is Lc0's internal MCTS search-tree depth,
+which is unrelated to the requested "depth" parameter above (that sets the node
+budget). Seeing e.g. depth 6 for a requested depth 12 is expected, not an error.
 
 Args:
   - fen (string): FEN of the position
-  - depth (number): Search strength 1–30 (mapped to node count; default 20)
+  - depth (number): Search strength 1–30 (mapped to node count; default 12 for Lc0)
   - multiPv (number): Number of lines 1–5 (default 3)
 
 Returns:
@@ -307,7 +314,7 @@ Returns:
 Examples:
   - "Analyse this position with Lc0: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
   - "What does the neural network think of this position?"`,
-      inputSchema: AnalysePositionSchema,
+      inputSchema: Lc0AnalysePositionSchema,
       outputSchema: AnalysePositionOutput,
       annotations: {
         readOnlyHint: true,
