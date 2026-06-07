@@ -23,4 +23,10 @@ describe('BaseUciEngine reliability', () => {
     await engine.quit();
     await expect(pending).rejects.toThrow();
   }, 5_000);
+
+  it('rejects without spawning when given an already-aborted signal', async () => {
+    const engine = new StockfishEngine('cat', 1, 16, 5_000);
+    await expect(engine.analyse(START_FEN, 8, 1, AbortSignal.abort())).rejects.toThrow(/cancel/i);
+    await engine.quit().catch(() => {});
+  }, 5_000);
 });

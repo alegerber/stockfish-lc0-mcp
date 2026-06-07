@@ -7,14 +7,15 @@ export async function analysePosition(
   engine: UciEngine,
   fen: string,
   depth: number,
-  multiPv: number
+  multiPv: number,
+  signal?: AbortSignal
 ): Promise<{ text: string; json: Record<string, unknown> }> {
   const fenCheck = validateFen(fen);
   if (!fenCheck.valid) {
     throw new Error(`Invalid FEN: "${fen}". ${fenCheck.error}`);
   }
 
-  const analysis = await engine.analyse(fen, depth, multiPv);
+  const analysis = await engine.analyse(fen, depth, multiPv, signal);
 
   // Enrich PV with SAN notation
   for (const line of analysis.lines) {

@@ -131,7 +131,7 @@ describe('generatePuzzle', () => {
   it('calls engine.analyse with 2 PVs', async () => {
     const engine = makeEngine(twoLines);
     await generatePuzzle(engine, START_FEN, 15);
-    expect(engine.analyse).toHaveBeenCalledWith(START_FEN, 15, 2);
+    expect(engine.analyse).toHaveBeenCalledWith(START_FEN, 15, 2, undefined);
   });
 
   it('text includes difficulty, FEN, theme, and spoiler solution', async () => {

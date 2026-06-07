@@ -1,5 +1,17 @@
 // Formatting utilities for engine output
 import type { UciScore, PositionAnalysis, MoveClassification, GameAnalysis } from '../types.js';
+import { CHARACTER_LIMIT } from '../constants.js';
+
+/** Cap a Markdown output string at CHARACTER_LIMIT, appending a notice if cut. */
+export function truncateOutput(text: string): string {
+  if (text.length <= CHARACTER_LIMIT) return text;
+  const notice = '\n\n…[output truncated]';
+  let cut = text.slice(0, CHARACTER_LIMIT - notice.length);
+  // Drop a trailing lone high surrogate if we sliced through an astral glyph.
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1);
+  return cut + notice;
+}
 
 /** Format a UCI score as a human-readable string. */
 export function formatScore(score: UciScore): string {

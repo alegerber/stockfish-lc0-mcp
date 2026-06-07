@@ -6,8 +6,8 @@
 export interface UciEngine {
   /** Spawn the engine process and configure UCI options. */
   init(): Promise<void>;
-  /** Analyse a position given as FEN. */
-  analyse(fen: string, depth: number, multiPv: number): Promise<PositionAnalysis>;
+  /** Analyse a position given as FEN. An optional AbortSignal cancels the search. */
+  analyse(fen: string, depth: number, multiPv: number, signal?: AbortSignal): Promise<PositionAnalysis>;
   /** Get only the best move for a position (fast, single-PV). */
   bestMove(fen: string, depth: number): Promise<string>;
   /** Shut down the engine process. */

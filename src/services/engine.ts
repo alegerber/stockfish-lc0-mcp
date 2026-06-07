@@ -198,7 +198,7 @@ abstract class BaseUciEngine implements UciEngine {
    * Must be called from inside a runExclusive() section, so only one stdout
    * listener is ever attached at a time. Defaults to `this.timeoutMs`.
    */
-  protected sendAndWait(cmd: string, until: string, timeoutMs?: number): Promise<string[]> {
+  protected sendAndWait(cmd: string, until: string, timeoutMs?: number, signal?: AbortSignal): Promise<string[]> {
     const ms = timeoutMs ?? this.timeoutMs;
     return new Promise((resolve, reject) => {
       if (!this.process) return reject(new Error(`${this.displayName} not running`));
@@ -206,9 +206,33 @@ abstract class BaseUciEngine implements UciEngine {
       const lines: string[] = [];
       let buffer = '';
       const timeout = setTimeout(() => {
+        // Halt a still-running search so it cannot desync the next operation.
+        try {
+          this.process?.stdin.write('stop\n');
+        } catch {
+          /* stream errors surface via the stdin 'error' handler */
+        }
         cleanup();
         reject(new Error(`Timeout waiting for "${until}" after ${ms}ms`));
       }, ms);
+
+      // On cancellation, ask the engine to stop searching so it emits its pending
+      // reply (e.g. "bestmove") promptly; the caller then rejects after draining.
+      const onAbort = (): void => {
+        // Ask the engine to stop searching so a live search emits its bestmove.
+        try {
+          this.process?.stdin.write('stop\n');
+        } catch {
+          /* stream errors surface via the stdin 'error' handler */
+        }
+        // Non-search waits (handshake/isready) have nothing to drain, so reject
+        // promptly. The search wait instead lets the incoming "bestmove" resolve
+        // it (drain), keeping the process in sync; the caller rejects afterwards.
+        if (until !== 'bestmove') {
+          cleanup();
+          reject(new Error('Analysis cancelled'));
+        }
+      };
 
       const onData = (chunk: Buffer): void => {
         buffer += chunk.toString();
@@ -228,6 +252,7 @@ abstract class BaseUciEngine implements UciEngine {
       const cleanup = (): void => {
         clearTimeout(timeout);
         this.process?.stdout.removeListener('data', onData);
+        signal?.removeEventListener('abort', onAbort);
         this.pendingReject = null;
       };
 
@@ -243,31 +268,44 @@ abstract class BaseUciEngine implements UciEngine {
           reject(err);
         }
       });
+
+      // Register the abort listener AFTER the command is queued so "stop" can
+      // never precede it.
+      if (signal) {
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      }
     });
   }
 
   async analyse(
     fen: string,
     depth = DEFAULT_DEPTH,
-    multiPv = DEFAULT_MULTI_PV
+    multiPv = DEFAULT_MULTI_PV,
+    signal?: AbortSignal
   ): Promise<PositionAnalysis> {
-    return this.runExclusive(() => this.analyseInternal(fen, depth, multiPv));
+    return this.runExclusive(() => this.analyseInternal(fen, depth, multiPv, signal));
   }
 
   /** The full analysis transaction. Assumes the mutex is held. */
   private async analyseInternal(
     fen: string,
     depth: number,
-    multiPv: number
+    multiPv: number,
+    signal?: AbortSignal
   ): Promise<PositionAnalysis> {
+    if (signal?.aborted) throw new Error('Analysis cancelled');
     await this.ensureReadyInternal();
 
     await this.send('ucinewgame');
-    await this.sendAndWait('isready', 'readyok');
+    await this.sendAndWait('isready', 'readyok', undefined, signal);
     await this.send(`setoption name MultiPV value ${multiPv}`);
     await this.send(`position fen ${fen}`);
 
-    const output = await this.sendAndWait(this.buildGoCommand(depth), 'bestmove');
+    // Pass the signal to the search wait: on abort it sends UCI "stop" so the
+    // engine returns "bestmove" promptly, keeping the process in sync.
+    const output = await this.sendAndWait(this.buildGoCommand(depth), 'bestmove', undefined, signal);
+    if (signal?.aborted) throw new Error('Analysis cancelled');
 
     const lines = parseInfoLines(output, multiPv);
     const bestMoveLine = output.find((l) => l.startsWith('bestmove'));
