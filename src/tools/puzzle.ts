@@ -119,7 +119,7 @@ export async function generatePuzzle(
 
 // --- helpers ---
 
-function detectTheme(score: UciScore, solutionSan: string[]): string {
+export function detectTheme(score: UciScore, solutionSan: string[]): string {
   if (score.type === 'mate') {
     return `Mate in ${Math.abs(score.value)}`;
   }

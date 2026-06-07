@@ -344,3 +344,49 @@ describe('analyseGame — classification taxonomy (#11 M4/L1/L3)', () => {
     expect(summary.whiteBlunders).toBe(1);
   });
 });
+
+describe('analyseGame — accuracy model (#16 M7)', () => {
+  it('scores a clean game near 100% accuracy', async () => {
+    const engine = makeEngine(); // constant eval → zero win-probability loss
+    const result = await analyseGame(engine, '1. a4 a5', 20);
+    expect(result.json.whiteAccuracy as number).toBeGreaterThan(99);
+    expect(result.json.blackAccuracy as number).toBeGreaterThan(99);
+  });
+
+  it('computes accuracy per side with the correct perspective when one side blunders', async () => {
+    // White holds +0.20 throughout; Black's 1...e5 drops White to +3.00 — a Black
+    // blunder. White accuracy must stay high, Black's must fall, proving the
+    // per-side win-probability negation works.
+    const engine: UciEngine = {
+      displayName: 'AsymAccuracy',
+      init: vi.fn(),
+      bestMove: vi.fn(async () => 'e2e4'),
+      quit: vi.fn(),
+      analyse: vi.fn(async (fen: string, depth: number) => {
+        const whitePov = fen.startsWith('rnbqkbnr/pppp1ppp/8/4p3') ? 300 : 20;
+        const value = fen.split(' ')[1] === 'w' ? whitePov : -whitePov;
+        return {
+          fen, bestMove: 'e2e4', evaluation: { type: 'cp' as const, value }, depth,
+          lines: [{ depth, score: { type: 'cp' as const, value }, pv: ['e2e4'], pvSan: [], nodes: 1, nps: 1, time: 1, multipv: 1 }],
+        } satisfies PositionAnalysis;
+      }),
+    };
+    const result = await analyseGame(engine, '1. e4 e5', 20);
+    const wa = result.json.whiteAccuracy as number;
+    const ba = result.json.blackAccuracy as number;
+    expect(wa).toBeGreaterThan(95); // White maintained the eval
+    expect(ba).toBeLessThan(70); // Black's e5 lost significant win probability
+    expect(ba).toBeLessThan(wa); // perspective: Black played worse than White
+  });
+
+  it('keeps accuracy well-defined for a game ending in checkmate', async () => {
+    const engine = makeEngine();
+    const result = await analyseGame(engine, '1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#', 20);
+    for (const acc of [result.json.whiteAccuracy as number, result.json.blackAccuracy as number]) {
+      expect(acc).toBeGreaterThanOrEqual(0);
+      expect(acc).toBeLessThanOrEqual(100);
+    }
+    const moves = result.json.moves as Array<{ classification: string }>;
+    expect(moves[moves.length - 1].classification).toBe('best'); // the mating move
+  });
+});

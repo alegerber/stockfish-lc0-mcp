@@ -16,8 +16,10 @@ import { START_FEN } from '../src/constants.js';
 // ── Skip the whole suite if Stockfish is not installed ────────────────────
 
 const SF_BIN = process.env.STOCKFISH_PATH ?? 'stockfish';
-const sfProbe = spawnSync(SF_BIN, ['--help'], { timeout: 3000 });
-const stockfishAvailable = sfProbe.error === undefined && sfProbe.status !== null;
+// Probe via a real UCI handshake — a binary that ignores '--help' and reads
+// stdin would hang until timeout and be wrongly reported as unavailable.
+const sfProbe = spawnSync(SF_BIN, [], { input: 'uci\nquit\n', timeout: 3000, encoding: 'utf8' });
+const stockfishAvailable = sfProbe.error === undefined && (sfProbe.stdout ?? '').includes('uciok');
 
 const describeIfSf = stockfishAvailable ? describe : describe.skip;
 
