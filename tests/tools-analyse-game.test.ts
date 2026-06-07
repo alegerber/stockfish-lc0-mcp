@@ -274,3 +274,73 @@ describe('analyseGame — engine efficiency & resilience', () => {
     ).rejects.toThrow(/cancel/i);
   });
 });
+
+describe('analyseGame — classification taxonomy (#11 M4/L1/L3)', () => {
+  it('classifies a near-best (zero/negative drop) move as excellent, never great', async () => {
+    const engine = makeEngine(); // constant eval 0 → drop 0
+    // '1. a4 a5' is not in the bundled opening book, so moves are scored by cp loss.
+    const result = await analyseGame(engine, '1. a4 a5', 20);
+    const moves = result.json.moves as Array<{ classification: string }>;
+    expect(moves.every((m) => m.classification !== 'great')).toBe(true);
+    expect(moves[0].classification).toBe('excellent');
+  });
+
+  it('labels opening-book moves as book (📖)', async () => {
+    const engine = makeEngine();
+    // Ruy Lopez — every move is in the bundled book.
+    const result = await analyseGame(engine, '1. e4 e5 2. Nf3 Nc6 3. Bb5', 20);
+    const moves = result.json.moves as Array<{ classification: string }>;
+    expect(moves.every((m) => m.classification === 'book')).toBe(true);
+    expect(result.text).toContain('📖');
+  });
+
+  it('caps the reported evalDrop at a mate boundary', async () => {
+    // before = mate (centipawns ~+10000), after = cp 0 → raw drop ~9999, clamped.
+    const mateMock: UciEngine = {
+      displayName: 'MateBoundary',
+      init: vi.fn(),
+      bestMove: vi.fn(async () => 'e2e4'),
+      quit: vi.fn(),
+      analyse: vi.fn(async (fen: string, depth: number) => {
+        const score = fen.includes(' w ')
+          ? { type: 'mate' as const, value: 1 }
+          : { type: 'cp' as const, value: 0 };
+        return {
+          fen, bestMove: 'e2e4', evaluation: score, depth,
+          lines: [{ depth, score, pv: ['e2e4'], pvSan: [], nodes: 1, nps: 1, time: 1, multipv: 1 }],
+        } satisfies PositionAnalysis;
+      }),
+    };
+    const result = await analyseGame(mateMock, '1. e4', 20);
+    const moves = result.json.moves as Array<{ evalDrop: number }>;
+    expect(Math.abs(moves[0].evalDrop)).toBeLessThanOrEqual(1000);
+  });
+
+  it('does not hide a real error played inside a named book line', async () => {
+    // '1. e4 e5 2. Qh5' (Wayward Queen) is all in the bundled book, but 2. Qh5 is
+    // a real error — it must keep its error label, not be masked as 'book'.
+    const AFTER_QH5 = 'rnbqkbnr/pppp1ppp/8/4p2Q';
+    const engine: UciEngine = {
+      displayName: 'DubiousBook',
+      init: vi.fn(),
+      bestMove: vi.fn(async () => 'e2e4'),
+      quit: vi.fn(),
+      analyse: vi.fn(async (fen: string, depth: number) => {
+        // White is +0.5 everywhere except after 2. Qh5, where White is −5.
+        const whitePov = fen.startsWith(AFTER_QH5) ? -500 : 50;
+        const value = fen.split(' ')[1] === 'w' ? whitePov : -whitePov;
+        return {
+          fen, bestMove: 'e2e4', evaluation: { type: 'cp' as const, value }, depth,
+          lines: [{ depth, score: { type: 'cp' as const, value }, pv: ['e2e4'], pvSan: [], nodes: 1, nps: 1, time: 1, multipv: 1 }],
+        } satisfies PositionAnalysis;
+      }),
+    };
+    const result = await analyseGame(engine, '1. e4 e5 2. Qh5', 20);
+    const moves = result.json.moves as Array<{ move: string; classification: string }>;
+    expect(moves[0].classification).toBe('book'); // 1. e4 — sound book move
+    expect(moves[2].move).toBe('Qh5');
+    expect(moves[2].classification).toBe('blunder'); // a real error, NOT masked as 'book'
+    const summary = result.json.summary as { whiteBlunders: number };
+    expect(summary.whiteBlunders).toBe(1);
+  });
+});

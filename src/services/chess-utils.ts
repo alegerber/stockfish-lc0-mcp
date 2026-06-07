@@ -163,7 +163,7 @@ export function getAllOpenings(): OpeningInfo[] {
 }
 
 /** Extract a flat list of SAN moves from a short PGN (no headers). */
-function pgnToMoveList(pgn: string): string[] {
+export function pgnToMoveList(pgn: string): string[] {
   return pgn
     .replace(/\d+\.\s*/g, '')
     .split(/\s+/)

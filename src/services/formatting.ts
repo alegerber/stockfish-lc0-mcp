@@ -97,7 +97,9 @@ export function formatGameAnalysis(analysis: GameAnalysis): string {
       continue;
     }
     const evalStr = formatScore(whitePovScore(m.evalAfter, m.side));
-    const bestStr = m.bestMoveSan !== m.moveSan ? ` (best: ${m.bestMoveSan})` : '';
+    // Don't second-guess a theory ('book') move with a "(best: …)" suffix.
+    const bestStr =
+      m.classification !== 'book' && m.bestMoveSan !== m.moveSan ? ` (best: ${m.bestMoveSan})` : '';
     parts.push(`${moveNum} ${m.moveSan} ${icon} [${evalStr}]${bestStr}`);
   }
 
@@ -107,15 +109,13 @@ export function formatGameAnalysis(analysis: GameAnalysis): string {
 /** Map classification to a chess.com-style icon. */
 function classificationIcon(c: MoveClassification): string {
   const icons: Record<MoveClassification, string> = {
-    brilliant: '!!',
-    great: '!',
+    book: '📖',
     best: '★',
     excellent: '✓',
     good: '○',
     inaccuracy: '?!',
     mistake: '?',
     blunder: '??',
-    book: '📖',
     unknown: '—',
   };
   return icons[c] ?? '';
