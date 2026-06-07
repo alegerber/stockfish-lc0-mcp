@@ -278,11 +278,25 @@ describe('analyseGame — engine efficiency & resilience', () => {
 describe('analyseGame — classification taxonomy (#11 M4/L1/L3)', () => {
   it('classifies a near-best (zero/negative drop) move as excellent, never great', async () => {
     const engine = makeEngine(); // constant eval 0 → drop 0
-    // '1. a4 a5' is not in the bundled opening book, so moves are scored by cp loss.
-    const result = await analyseGame(engine, '1. a4 a5', 20);
+    // 1.a4 a5 is the Ware Opening (now in the expanded book) → labelled 'book';
+    // 2.h4 h5 leaves book, so those zero-drop, non-best moves are scored by cp
+    // loss → 'excellent' (and never the fictional 'great' tier).
+    const result = await analyseGame(engine, '1. a4 a5 2. h4 h5', 20);
     const moves = result.json.moves as Array<{ classification: string }>;
     expect(moves.every((m) => m.classification !== 'great')).toBe(true);
-    expect(moves[0].classification).toBe('excellent');
+    expect(moves[2].classification).toBe('excellent');
+    expect(moves[3].classification).toBe('excellent');
+  });
+
+  it('does not whitewash out-of-book interior moves as book (gap-bug, review)', async () => {
+    const engine = makeEngine(); // constant eval 0 → drop 0
+    // 1.Nf3 d5 2.g3 g6 is in book; the knight round-trip 3.Nd4 Nd7 4.Nf3 Nb8
+    // leaves book and transposes back. bookDepth is the CONTIGUOUS prefix (4), so
+    // the shuffle plies (5-8) must be scored on their merits, not labelled 'book'.
+    const result = await analyseGame(engine, '1. Nf3 d5 2. g3 g6 3. Nd4 Nd7 4. Nf3 Nb8', 20);
+    const moves = result.json.moves as Array<{ classification: string }>;
+    expect(moves.slice(0, 4).every((m) => m.classification === 'book')).toBe(true);
+    expect(moves.slice(4).every((m) => m.classification !== 'book')).toBe(true);
   });
 
   it('labels opening-book moves as book (📖)', async () => {

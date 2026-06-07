@@ -1,7 +1,7 @@
 // Tool: Analyse a full game from PGN
 import type { UciEngine, MoveAnalysis, MoveClassification, GameAnalysis, UciScore, PositionAnalysis } from '../types.js';
 import { centipawns } from '../types.js';
-import { parsePgn, uciToSan, lookupOpening, isGameOver, pgnToMoveList } from '../services/chess-utils.js';
+import { parsePgn, uciToSan, isGameOver, detectOpening } from '../services/chess-utils.js';
 import { formatGameAnalysis, formatScore, whitePovScore, negateScore } from '../services/formatting.js';
 import { START_FEN, BLUNDER_THRESHOLD, MISTAKE_THRESHOLD, INACCURACY_THRESHOLD, GOOD_THRESHOLD, MAX_REPORTED_DROP } from '../constants.js';
 
@@ -20,12 +20,15 @@ export async function analyseGame(
   }
   if (signal?.aborted) throw new Error('Analysis cancelled');
 
-  // Detect opening
-  const sanMoves = moves.map((m) => m.san);
-  const opening = lookupOpening(sanMoves);
-  const openingName = opening?.name ?? headers['ECO'] ?? 'Unknown';
-  // How many leading moves are still "in book" (theory) — they get the 'book' label.
-  const bookMoveCount = opening ? pgnToMoveList(opening.pgn).length : 0;
+  // Detect opening by board position (transposition-aware). detectOpening keys
+  // on the FEN after each ply, so the recognised line is correct even when the
+  // opening arises via a different move order.
+  const detected = detectOpening(moves.map((m) => m.fen));
+  const openingName = detected?.opening.name ?? headers['ECO'] ?? 'Unknown';
+  // How many leading plies stayed "in book" (theory) — they get the 'book'
+  // label. bookDepth is the actual ply at which the game left book, so it is
+  // right even for transposed openings.
+  const bookMoveCount = detected?.bookDepth ?? 0;
 
   // Analyse the starting position once. This analysis is carried forward and
   // reused as the "before" analysis of the next move, so each position is

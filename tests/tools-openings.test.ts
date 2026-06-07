@@ -43,6 +43,19 @@ describe('lookupOpeningByQuery', () => {
     expect(results[0]).toHaveProperty('pgn');
     expect(results[0]).toHaveProperty('fen');
   });
+
+  it("finds the King's Indian by name (was empty in the old book)", () => {
+    const result = lookupOpeningByQuery("King's Indian");
+    expect(result.json.count as number).toBeGreaterThan(0);
+    expect(result.text).toContain("King's Indian");
+  });
+
+  it('caps the displayed results and still reports the true total', () => {
+    const result = lookupOpeningByQuery('Sicilian'); // matches far more than the cap
+    const results = result.json.results as unknown[];
+    expect(results.length).toBeLessThanOrEqual(25);
+    expect(result.json.count as number).toBeGreaterThanOrEqual(results.length);
+  });
 });
 
 describe('identifyOpeningFromPgn', () => {
@@ -59,8 +72,9 @@ describe('identifyOpeningFromPgn', () => {
     expect(result.text).toContain('Sicilian');
   });
 
-  it('returns not-identified for unrecognized moves', () => {
-    const result = identifyOpeningFromPgn('1. b4 b5');
+  it('returns not-identified for unrecognized (illegal) input', () => {
+    // 1.b4 is now a known opening (Polish), so use input with no legal replay.
+    const result = identifyOpeningFromPgn('notmoves');
     expect(result.json.identified).toBe(false);
     expect(result.text).toContain('Could not identify');
   });
