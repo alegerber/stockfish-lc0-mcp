@@ -13,6 +13,10 @@ export const CHARACTER_LIMIT = 50000;
 // override per deployment via the ENGINE_TIMEOUT_MS env var.
 export const DEFAULT_ENGINE_TIMEOUT_MS = 120_000;
 
+// Minimum centipawn gap between the best and second-best move for a position to
+// count as a tactic puzzle (a forced mate always qualifies regardless).
+export const MIN_TACTIC_ADVANTAGE = 150;
+
 // Thresholds for move classification (in centipawns)
 export const BLUNDER_THRESHOLD = 200;
 export const MISTAKE_THRESHOLD = 100;
