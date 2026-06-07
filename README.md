@@ -27,7 +27,10 @@ A Model Context Protocol (MCP) server providing AI assistants with professional-
 ### Option 1: Docker (recommended)
 
 ```bash
-# Stockfish only
+# Published image (Stockfish + Lc0 + Maia-1900 baked in; linux/amd64 + arm64)
+docker run -i ghcr.io/alegerber/stockfish-lc0-mcp:latest
+
+# …or build it yourself — Stockfish only
 docker build -t chess-mcp-server .
 docker run -i chess-mcp-server
 
