@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { generatePuzzle } from '../src/tools/puzzle.js';
+import { generatePuzzle, detectTheme } from '../src/tools/puzzle.js';
 import type { UciEngine, PositionAnalysis, UciLine } from '../src/types.js';
 import { START_FEN } from '../src/constants.js';
 
@@ -206,5 +206,36 @@ describe('generatePuzzle — tactic gate & output format', () => {
     const header = result.text.split('<details>')[0];
     expect(header).not.toContain('Mate'); // theme not leaked before the spoiler
     expect(result.text).toContain('Mate in 1'); // but present inside it
+  });
+});
+
+describe('detectTheme', () => {
+  it('reports Mate in N for a mate score (either sign)', () => {
+    expect(detectTheme({ type: 'mate', value: 3 }, [])).toBe('Mate in 3');
+    expect(detectTheme({ type: 'mate', value: -2 }, [])).toBe('Mate in 2');
+  });
+
+  it('Promotion when the solution promotes', () => {
+    expect(detectTheme({ type: 'cp', value: 50 }, ['e8=Q'])).toBe('Promotion');
+  });
+
+  it('Attacking combination for a checking capture', () => {
+    expect(detectTheme({ type: 'cp', value: 50 }, ['Qxf7+'])).toBe('Attacking combination');
+  });
+
+  it('Forcing sequence for a check without a capture', () => {
+    expect(detectTheme({ type: 'cp', value: 50 }, ['Qh5+'])).toBe('Forcing sequence');
+  });
+
+  it('Tactical combination for a capture without a check', () => {
+    expect(detectTheme({ type: 'cp', value: 50 }, ['Nxe5'])).toBe('Tactical combination');
+  });
+
+  it('Winning material for a large cp edge with no tactical pattern', () => {
+    expect(detectTheme({ type: 'cp', value: 400 }, ['Be3'])).toBe('Winning material');
+  });
+
+  it('Best move for a dominant but quiet move', () => {
+    expect(detectTheme({ type: 'cp', value: 50 }, ['Be3'])).toBe('Best move');
   });
 });
