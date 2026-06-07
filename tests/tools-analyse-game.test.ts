@@ -389,4 +389,21 @@ describe('analyseGame — accuracy model (#16 M7)', () => {
     const moves = result.json.moves as Array<{ classification: string }>;
     expect(moves[moves.length - 1].classification).toBe('best'); // the mating move
   });
+
+  it('reports n/a accuracy when no move could be analysed (not a misleading 100%)', async () => {
+    // Every analyse() fails → every move is 'unknown' → no analysable moves.
+    const failing: UciEngine = {
+      displayName: 'AlwaysFails',
+      init: vi.fn(),
+      bestMove: vi.fn(async () => 'e2e4'),
+      quit: vi.fn(),
+      analyse: vi.fn(async () => {
+        throw new Error('engine down');
+      }),
+    };
+    const result = await analyseGame(failing, '1. e4 e5', 20);
+    expect(result.json.whiteAccuracy).toBe('n/a');
+    expect(result.json.blackAccuracy).toBe('n/a');
+    expect(result.text).toContain('n/a');
+  });
 });

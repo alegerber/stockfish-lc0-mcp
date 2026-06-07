@@ -77,8 +77,9 @@ export type MoveClassification =
 
 export interface GameAnalysis {
   moves: MoveAnalysis[];
-  whiteAccuracy: number;
-  blackAccuracy: number;
+  /** null when no move for that side could be analysed (reported as n/a). */
+  whiteAccuracy: number | null;
+  blackAccuracy: number | null;
   summary: GameSummary;
 }
 
