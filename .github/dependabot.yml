@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Keep the SHA-pinned GitHub Actions current. Dependabot understands the
+  # `@<sha> # vX` pin format and opens grouped bump PRs (with changelogs), so the
+  # pins gain immutability AND timely security updates — the combination that
+  # makes pinning worthwhile (see #34/#35).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

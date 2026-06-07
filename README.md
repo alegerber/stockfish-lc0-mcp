@@ -27,15 +27,18 @@ A Model Context Protocol (MCP) server providing AI assistants with professional-
 ### Option 1: Docker (recommended)
 
 ```bash
-# Stockfish only
-docker build -t chess-mcp-server .
-docker run -i chess-mcp-server
+# Published image (Stockfish + Lc0 + Maia-1900 baked in; linux/amd64 + arm64)
+docker run -i ghcr.io/alegerber/stockfish-lc0-mcp:latest
+
+# …or build it yourself — Stockfish only
+docker build -t stockfish-lc0-mcp .
+docker run -i stockfish-lc0-mcp
 
 # With Lc0 (mount weights file)
 docker run -i \
   -e LC0_WEIGHTS_PATH=/weights/lc0.pb.gz \
   -v /path/to/weights:/weights \
-  chess-mcp-server
+  stockfish-lc0-mcp
 
 # Or with docker compose
 docker compose up --build
@@ -95,7 +98,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "chess": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "chess-mcp-server"]
+      "args": ["run", "-i", "--rm", "stockfish-lc0-mcp"]
     }
   }
 }
@@ -112,7 +115,7 @@ Add to your `claude_desktop_config.json`:
         "run", "-i", "--rm",
         "-e", "LC0_WEIGHTS_PATH=/weights/lc0.pb.gz",
         "-v", "/path/to/weights:/weights",
-        "chess-mcp-server"
+        "stockfish-lc0-mcp"
       ]
     }
   }
@@ -126,7 +129,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "chess": {
       "command": "node",
-      "args": ["/path/to/chess-mcp-server/dist/index.js"],
+      "args": ["/path/to/stockfish-lc0-mcp/dist/index.js"],
       "env": {
         "STOCKFISH_PATH": "stockfish",
         "STOCKFISH_THREADS": "2",

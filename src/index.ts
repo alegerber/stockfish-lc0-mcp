@@ -32,7 +32,7 @@ try {
   ) as { version?: string };
   if (pkg.version) serverVersion = pkg.version;
 } catch (err) {
-  console.error(`[chess-mcp] Could not read version from package.json: ${err instanceof Error ? err.message : err}`);
+  console.error(`[stockfish-lc0-mcp] Could not read version from package.json: ${err instanceof Error ? err.message : err}`);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ function parsePositiveInt(raw: string | undefined, name: string, defaultValue: n
   if (raw === undefined || raw === '') return defaultValue;
   const parsed = parseInt(raw, 10);
   if (isNaN(parsed) || parsed <= 0) {
-    console.error(`[chess-mcp] Invalid ${name}: "${raw}", using default ${defaultValue}`);
+    console.error(`[stockfish-lc0-mcp] Invalid ${name}: "${raw}", using default ${defaultValue}`);
     return defaultValue;
   }
   return parsed;
@@ -389,32 +389,32 @@ Examples:
     wrapTool(({ fen, depth }, signal) => generatePuzzle(requireLc0(), fen, depth, signal))
   );
 
-  console.error('[chess-mcp] Lc0 tools registered: lc0_analyse_position, lc0_analyse_game, lc0_generate_puzzle');
+  console.error('[stockfish-lc0-mcp] Lc0 tools registered: lc0_analyse_position, lc0_analyse_game, lc0_generate_puzzle');
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.error('[chess-mcp] Initialising Stockfish engine...');
+  console.error('[stockfish-lc0-mcp] Initialising Stockfish engine...');
   await sfEngine.init();
-  console.error('[chess-mcp] Stockfish ready.');
+  console.error('[stockfish-lc0-mcp] Stockfish ready.');
 
   if (lc0Engine) {
-    console.error('[chess-mcp] Initialising Lc0 engine...');
+    console.error('[stockfish-lc0-mcp] Initialising Lc0 engine...');
     await lc0Engine.init();
-    console.error('[chess-mcp] Lc0 ready.');
+    console.error('[stockfish-lc0-mcp] Lc0 ready.');
   } else {
-    console.error('[chess-mcp] Lc0 disabled (set LC0_WEIGHTS_PATH to enable).');
+    console.error('[stockfish-lc0-mcp] Lc0 disabled (set LC0_WEIGHTS_PATH to enable).');
   }
 
-  console.error('[chess-mcp] Starting stdio transport...');
+  console.error('[stockfish-lc0-mcp] Starting stdio transport...');
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[chess-mcp] MCP server running on stdio');
+  console.error('[stockfish-lc0-mcp] MCP server running on stdio');
 
   // Graceful shutdown
   const shutdown = async (): Promise<void> => {
-    console.error('[chess-mcp] Shutting down...');
+    console.error('[stockfish-lc0-mcp] Shutting down...');
     await sfEngine.quit();
     if (lc0Engine) await lc0Engine.quit();
     process.exit(0);
@@ -425,6 +425,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('[chess-mcp] Fatal:', err);
+  console.error('[stockfish-lc0-mcp] Fatal:', err);
   process.exit(1);
 });
