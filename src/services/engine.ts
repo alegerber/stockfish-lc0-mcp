@@ -12,6 +12,25 @@ import type { UciEngine, UciLine, UciScore, PositionAnalysis } from '../types.js
 
 // ── Shared UCI helpers ────────────────────────────────────────────────────
 
+/**
+ * Defense-in-depth guard for every outbound UCI command. Callers are expected
+ * to validate their inputs (e.g. `validateFen` rejects whitespace before a FEN
+ * ever reaches the engine), but the engine must not trust them: a command
+ * carrying a newline could smuggle a second UCI line. Throws — rather than
+ * silently stripping — so a validation bypass surfaces loudly instead of
+ * sending a half-sanitised command.
+ */
+export function assertSafeUciCommand(cmd: string): void {
+  for (let i = 0; i < cmd.length; i++) {
+    // Reject C0 control characters (incl. newline/CR/tab) and DEL — the
+    // vehicles for UCI line injection. Space (0x20) and printable ASCII pass.
+    const code = cmd.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      throw new Error(`Refusing to send UCI command with control characters: ${JSON.stringify(cmd)}`);
+    }
+  }
+}
+
 /** Parse UCI info lines into structured data. */
 function parseInfoLines(output: string[], multiPv: number): UciLine[] {
   const pvMap = new Map<number, UciLine>();
@@ -184,6 +203,11 @@ abstract class BaseUciEngine implements UciEngine {
   protected send(cmd: string): Promise<void> {
     const proc = this.process;
     if (!proc) return Promise.reject(new Error(`${this.displayName} not running`));
+    try {
+      assertSafeUciCommand(cmd);
+    } catch (err) {
+      return Promise.reject(err as Error);
+    }
     return new Promise((resolve, reject) => {
       // The write callback fires once the chunk is flushed (which also orders
       // correctly under backpressure). UCI commands are tiny, so the pipe buffer
@@ -202,6 +226,11 @@ abstract class BaseUciEngine implements UciEngine {
     const ms = timeoutMs ?? this.timeoutMs;
     return new Promise((resolve, reject) => {
       if (!this.process) return reject(new Error(`${this.displayName} not running`));
+      try {
+        assertSafeUciCommand(cmd);
+      } catch (err) {
+        return reject(err as Error);
+      }
 
       const lines: string[] = [];
       let buffer = '';

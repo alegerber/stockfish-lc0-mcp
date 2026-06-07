@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { StockfishEngine } from '../src/services/engine.js';
+import { StockfishEngine, assertSafeUciCommand } from '../src/services/engine.js';
 
 // These tests use `cat` as a stand-in "engine": it echoes stdin but never emits
 // the UCI handshake reply ("uciok"), so they exercise the timeout and shutdown
@@ -29,4 +29,26 @@ describe('BaseUciEngine reliability', () => {
     await expect(engine.analyse(START_FEN, 8, 1, AbortSignal.abort())).rejects.toThrow(/cancel/i);
     await engine.quit().catch(() => {});
   }, 5_000);
+});
+
+describe('assertSafeUciCommand (UCI-injection defense)', () => {
+  // Control characters built by code point — no literal control bytes in source.
+  const LF = String.fromCharCode(10); // newline
+  const CR = String.fromCharCode(13); // carriage return
+  const TAB = String.fromCharCode(9);
+
+  it('accepts ordinary UCI commands', () => {
+    expect(() => assertSafeUciCommand(`position fen ${START_FEN}`)).not.toThrow();
+    expect(() => assertSafeUciCommand('setoption name Hash value 128')).not.toThrow();
+    expect(() => assertSafeUciCommand('go depth 12')).not.toThrow();
+  });
+
+  it('rejects a newline-smuggled second UCI line', () => {
+    expect(() => assertSafeUciCommand(`position fen ${START_FEN}${LF}quit`)).toThrow(/control characters/);
+  });
+
+  it('rejects carriage returns and tabs', () => {
+    expect(() => assertSafeUciCommand(`go depth 8${CR}stop`)).toThrow(/control characters/);
+    expect(() => assertSafeUciCommand(`setoption name Backend value${TAB}x`)).toThrow(/control characters/);
+  });
 });
