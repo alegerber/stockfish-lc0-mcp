@@ -169,8 +169,8 @@ export async function analyseGame(
   const json = {
     opening: openingName,
     totalMoves: moves.length,
-    whiteAccuracy: Math.round(whiteAccuracy * 10) / 10,
-    blackAccuracy: Math.round(blackAccuracy * 10) / 10,
+    whiteAccuracy: whiteAccuracy === null ? 'n/a' : Math.round(whiteAccuracy * 10) / 10,
+    blackAccuracy: blackAccuracy === null ? 'n/a' : Math.round(blackAccuracy * 10) / 10,
     summary,
     moves: moveAnalyses.map((m) => ({
       moveNumber: m.moveNumber,
@@ -230,44 +230,56 @@ function count(moves: MoveAnalysis[], side: 'white' | 'black', cls: MoveClassifi
 }
 
 /**
- * Win probability from centipawn score, using the Lichess model.
- * Returns a value between 0 and 1.
+ * Win probability (0–1) from a centipawn score, using the Lichess logistic.
+ * The cp is clamped to ±1000 first — Lichess caps the eval before the logistic,
+ * so mate scores (centipawns() maps them to ±10000) don't saturate win% to 0/1
+ * and flatten accuracy distinctions in clearly won/lost positions.
  */
-function winProbability(cp: number): number {
-  return 1 / (1 + Math.exp(-0.00368208 * cp));
+export function winProbability(cp: number): number {
+  const clamped = Math.max(-1000, Math.min(1000, cp));
+  return 1 / (1 + Math.exp(-0.00368208 * clamped));
 }
 
 /**
- * Accuracy model based on win-probability loss (similar to Lichess/chess.com).
- *
- * For each move, accuracy = 103.1668 * exp(-0.04354 * wpLoss) - 3.1669
- * where wpLoss is the win-probability loss in percentage points.
- * This gives ~100% for 0 loss, ~55% for a 10pp loss, and near 0% for
- * large losses. The formula is the Lichess accuracy model.
+ * Aggregate per-move accuracies into a single game accuracy. Approximates the
+ * Lichess model — the mean of the arithmetic and harmonic means of the per-move
+ * curve — but omits Lichess's volatility weighting (which would weight the
+ * arithmetic term by the win% volatility around each move). The harmonic term
+ * makes a few bad moves weigh more than a plain average would; flooring each
+ * reciprocal at 1 keeps a single catastrophic (0%) move from collapsing the
+ * whole game to 0.
  */
-function computeAccuracy(moves: MoveAnalysis[]): number {
+export function aggregateAccuracy(accuracies: number[]): number {
+  if (accuracies.length === 0) return 100;
+  const arithmetic = accuracies.reduce((sum, a) => sum + a, 0) / accuracies.length;
+  const harmonic = accuracies.length / accuracies.reduce((sum, a) => sum + 1 / Math.max(a, 1), 0);
+  return (arithmetic + harmonic) / 2;
+}
+
+/**
+ * Per-move accuracy via the Lichess win-probability curve, aggregated with
+ * {@link aggregateAccuracy}. Per move: accuracy = 103.1668 * exp(-0.04354 *
+ * wpLoss) - 3.1669 (clamped 0–100), where wpLoss is the win-probability loss in
+ * percentage points — ~100% for 0 loss, ~64% for a 10pp loss, near 0% for large.
+ *
+ * Returns null when no move could be analysed (e.g. the engine failed on every
+ * position for this side), so "no data" is reported as n/a rather than masquerading
+ * as a flawless 100%.
+ */
+function computeAccuracy(moves: MoveAnalysis[]): number | null {
   // Unanalysed (skipped) moves have no meaningful eval — exclude them.
   const analysed = moves.filter((m) => m.classification !== 'unknown');
-  if (analysed.length === 0) return 100;
+  if (analysed.length === 0) return null;
 
-  let totalAccuracy = 0;
-  for (const m of analysed) {
-    const cpBefore = centipawns(m.evalBefore);
-    const cpAfter = centipawns(m.evalAfter);
-
-    // evalBefore is from the mover's perspective (side-to-move before the move).
-    // evalAfter is from the opponent's perspective (side-to-move after the move).
-    // winProbability(cp) gives win prob for the side whose perspective cp is in.
-    const wpBefore = winProbability(cpBefore);       // mover's win prob before
-    const wpAfter = winProbability(-cpAfter);         // mover's win prob after (negate opponent's POV)
-
-    // Win-probability loss in percentage points (0–100 scale)
+  const perMove = analysed.map((m) => {
+    // evalBefore is from the mover's perspective (side-to-move before the move);
+    // evalAfter is from the opponent's (side-to-move after). Normalise both to the
+    // mover's win probability, then derive the per-move accuracy from the loss.
+    const wpBefore = winProbability(centipawns(m.evalBefore));
+    const wpAfter = winProbability(-centipawns(m.evalAfter));
     const wpLoss = Math.max(0, (wpBefore - wpAfter) * 100);
+    return Math.min(100, Math.max(0, 103.1668 * Math.exp(-0.04354 * wpLoss) - 3.1669));
+  });
 
-    // Lichess accuracy formula per move
-    const moveAccuracy = Math.min(100, Math.max(0, 103.1668 * Math.exp(-0.04354 * wpLoss) - 3.1669));
-    totalAccuracy += moveAccuracy;
-  }
-
-  return totalAccuracy / analysed.length;
+  return aggregateAccuracy(perMove);
 }

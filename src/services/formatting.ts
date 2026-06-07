@@ -73,8 +73,9 @@ export function formatGameAnalysis(analysis: GameAnalysis): string {
   parts.push(`**Total moves:** ${s.totalMoves}`);
   parts.push('');
   parts.push('## Accuracy');
-  parts.push(`- White: **${analysis.whiteAccuracy.toFixed(1)}%**`);
-  parts.push(`- Black: **${analysis.blackAccuracy.toFixed(1)}%**`);
+  const accuracyStr = (a: number | null): string => (a === null ? 'n/a' : `${a.toFixed(1)}%`);
+  parts.push(`- White: **${accuracyStr(analysis.whiteAccuracy)}**`);
+  parts.push(`- Black: **${accuracyStr(analysis.blackAccuracy)}**`);
   parts.push('');
   parts.push('## Error Count');
   parts.push(`| | Blunders | Mistakes | Inaccuracies |`);
