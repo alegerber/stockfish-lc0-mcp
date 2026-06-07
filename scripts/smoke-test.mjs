@@ -92,6 +92,52 @@ async function checkAnalysePosition(client, toolName) {
     `${toolName} returned at least one analysis line`);
 }
 
+async function checkAnalyseGame(client, toolName) {
+  const res = await client.callTool(
+    {
+      name: toolName,
+      arguments: { pgn: '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6', depth: toolName.startsWith('lc0') ? 4 : 8 },
+    },
+    undefined,
+    { timeout: CALL_TIMEOUT_MS }
+  );
+  assert(res.isError !== true, `${toolName} returned a non-error result`);
+  const sc = res.structuredContent ?? {};
+  assert(sc.whiteAccuracy !== undefined && sc.blackAccuracy !== undefined,
+    `${toolName} returned white/black accuracy`);
+  assert(Array.isArray(sc.moves) && sc.moves.length >= 1,
+    `${toolName} returned per-move analysis`);
+  assert(sc.summary !== null && typeof sc.summary === 'object',
+    `${toolName} returned a summary`);
+}
+
+async function checkGeneratePuzzle(client, toolName) {
+  const res = await client.callTool(
+    { name: toolName, arguments: { fen: START_FEN, depth: toolName.startsWith('lc0') ? 4 : 8 } },
+    undefined,
+    { timeout: CALL_TIMEOUT_MS }
+  );
+  assert(res.isError !== true, `${toolName} returned a non-error result`);
+  const sc = res.structuredContent ?? {};
+  assert(typeof sc.hasTactic === 'boolean', `${toolName} returned a hasTactic flag`);
+  // Either a tactic (with a solution) or a quiet position (with a best move).
+  assert(sc.hasTactic ? Array.isArray(sc.solution) : typeof sc.bestMove === 'string',
+    `${toolName} returned a coherent puzzle / no-tactic payload`);
+}
+
+async function checkIdentifyOpening(client) {
+  const res = await client.callTool(
+    { name: 'sf_identify_opening', arguments: { pgn: '1. e4 c5' } },
+    undefined,
+    { timeout: CALL_TIMEOUT_MS }
+  );
+  assert(res.isError !== true, 'sf_identify_opening returned a non-error result');
+  const sc = res.structuredContent ?? {};
+  assert(sc.identified === true, 'sf_identify_opening identified 1. e4 c5');
+  assert(JSON.stringify(sc).toLowerCase().includes('sicilian'),
+    'sf_identify_opening recognised the Sicilian');
+}
+
 async function run() {
   const client = new Client({ name: 'smoke-test', version: '1.0.0' }, { capabilities: {} });
 
@@ -117,15 +163,21 @@ async function run() {
       JSON.stringify(lookup.structuredContent ?? {}).toLowerCase().includes('italian'),
       'sf_lookup_opening found the Italian Game'
     );
+    await checkIdentifyOpening(client);
 
-    // 3) The real Stockfish engine path.
+    // 3) Every Stockfish engine tool, end-to-end (each call also exercises the
+    //    server-side outputSchema validation against real engine output).
     await checkAnalysePosition(client, 'sf_analyse_position');
+    await checkAnalyseGame(client, 'sf_analyse_game');
+    await checkGeneratePuzzle(client, 'sf_generate_puzzle');
 
     // 4) The Lc0 path — only when the server advertises the lc0_* tools (full
     //    Docker image / LC0_WEIGHTS_PATH set). Skipped cleanly otherwise.
     if (names.has('lc0_analyse_position')) {
       for (const t of LC0_TOOLS) assert(names.has(t), `tools/list advertises ${t}`);
       await checkAnalysePosition(client, 'lc0_analyse_position');
+      await checkAnalyseGame(client, 'lc0_analyse_game');
+      await checkGeneratePuzzle(client, 'lc0_generate_puzzle');
     } else {
       console.error('  • Lc0 not enabled — skipping lc0_* checks '
         + '(set LC0_WEIGHTS_PATH, or run with SMOKE_DOCKER_IMAGE=stockfish-lc0-mcp)');
