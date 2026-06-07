@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP server wrapping UCI chess engines (Stockfish and Leela Chess Zero). Provides 8 tools for chess analysis over the Model Context Protocol stdio transport. Written in TypeScript (strict mode), runs on Node.js 22+, deployed via Docker.
+MCP server wrapping UCI chess engines (Stockfish and Leela Chess Zero). Provides 8 tools for chess analysis over the Model Context Protocol stdio transport. Written in TypeScript (strict mode), runs on Node.js 24+, deployed via Docker.
 
 Both engines are enabled by default in Docker. Lc0 ships with the Maia-1900 neural network and uses the OpenBLAS CPU backend. Stockfish tools (`sf_*`) are always available. Lc0 tools (`lc0_*`) are conditionally registered when `LC0_WEIGHTS_PATH` is set (enabled by default in Docker).
 
@@ -112,7 +112,7 @@ ESM throughout. All local imports use `.js` extensions (e.g., `'./services/engin
 
 3. **Dynamic imports**: Do not use `await import('chess.js')` inside loops. Use static imports at module top.
 
-4. **Docker binary path**: The Debian `stockfish` package installs to `/usr/games/stockfish`, which is not on the default PATH in `node:22-slim`. `STOCKFISH_PATH` must be the absolute path.
+4. **Docker binary path**: The Debian `stockfish` package installs to `/usr/games/stockfish`, which is not on the default PATH in `node:24-slim`. `STOCKFISH_PATH` must be the absolute path.
 
 5. **Terminal positions**: The engine cannot meaningfully analyse checkmate/stalemate positions. Detect these with `chess.js` before calling `engine.analyse()`.
 
@@ -124,7 +124,7 @@ ESM throughout. All local imports use `.js` extensions (e.g., `'./services/engin
 
 ## Testing
 
-Tests use **Vitest** (`npm test`). ~125 unit tests, no engine binary required — all tool tests use a mock `UciEngine` via `vi.fn()`.
+Tests use **Vitest** (`npm test`). 150+ unit tests across 10 files, no engine binary required — all tool tests use a mock `UciEngine` via `vi.fn()`.
 
 ```bash
 npm test        # run all tests once
@@ -142,8 +142,9 @@ npm run lint    # ESLint (TypeScript rules configured in eslint.config.js)
 | `tests/types.test.ts` | `centipawns()` — cp passthrough, positive/negative mate conversions |
 | `tests/tools-openings.test.ts` | `lookupOpeningByQuery`, `identifyOpeningFromPgn` — found/not-found/ECO/headers |
 | `tests/tools-analyse-position.test.ts` | `analysePosition` — invalid FEN error, JSON structure, PV SAN enrichment, engine call args |
-| `tests/tools-analyse-game.test.ts` | `analyseGame` — empty PGN error, accuracy bounds, move fields, opening detection, summary counts |
-| `tests/tools-puzzle.test.ts` | `generatePuzzle` — invalid FEN/no-lines errors, difficulty classification, mate theme, solution cap |
+| `tests/tools-analyse-game.test.ts` | `analyseGame` — empty PGN error, accuracy model (per-side perspective), classification taxonomy + book moves, move fields, opening detection, summary counts |
+| `tests/tools-puzzle.test.ts` | `generatePuzzle` — invalid FEN/no-lines errors, difficulty classification, tactic gate, spoiler format; `detectTheme` — every theme branch |
+| `tests/engine.test.ts` | `BaseUciEngine` reliability — configurable timeout, `quit()` rejecting an in-flight operation, already-aborted-signal rejection (stubbed engine) |
 
 ### Mock engine pattern
 
@@ -159,7 +160,7 @@ function makeEngine(overrides: Partial<PositionAnalysis> = {}): UciEngine {
 }
 ```
 
-Engine integration tests (real Stockfish/Lc0 subprocess) are not present — they require binaries in CI.
+Engine integration tests (real Stockfish subprocess) live in `tests/integration.test.ts` and run via `npm run test:integration`. They auto-skip when no Stockfish binary is found — availability is probed with a real UCI handshake — so they stay out of the default `npm test` run. CI exercises them in a dedicated job with Stockfish installed.
 
 ### End-to-end smoke test
 
