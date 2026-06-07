@@ -14,10 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Pinned to a release tag for reproducible builds (was the moving release/0.32 branch).
+# -Dnative_arch=false: Lc0's release build defaults to -march=native, which tunes the
+# binary to the BUILD machine's CPU and SIGILLs on any other microarchitecture of the
+# same arch (e.g. built on a CI Graviton arm64 runner, run on Apple Silicon). A
+# distributed image must be portable, so build for the arch baseline instead.
 RUN git clone -b v0.32.1 --recurse-submodules \
       https://github.com/LeelaChessZero/lc0.git /tmp/lc0 \
     && cd /tmp/lc0 \
-    && ./build.sh release \
+    && ./build.sh release -Dnative_arch=false \
     && cp /tmp/lc0/build/release/lc0 /usr/local/bin/lc0 \
     && rm -rf /tmp/lc0
 
