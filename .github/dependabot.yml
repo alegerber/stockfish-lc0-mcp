@@ -9,5 +9,12 @@ updates:
     schedule:
       interval: weekly
     groups:
-      actions:
+      # Minor/patch action bumps are low-risk → batch them into one PR.
+      actions-minor:
         patterns: ['*']
+        update-types: ['minor', 'patch']
+      # MAJOR bumps are intentionally NOT grouped: each one falls back to
+      # Dependabot's default (one PR per action), so a potentially breaking
+      # major is reviewed on its own. This matters because release.yml is not
+      # exercised by PR CI — it only runs on a tag push or manual dispatch
+      # (see #44, which grouped 5 majors into a single PR). — #45

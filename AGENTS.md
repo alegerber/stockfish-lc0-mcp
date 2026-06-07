@@ -186,6 +186,17 @@ Diagnostic output goes to stderr. JSON-RPC responses go to stdout.
 | `zod` | Input schema validation for all tools |
 | `typescript` | Build-time compiler |
 
+## CI/CD & Dependency Updates
+
+- **Two workflows**: `ci.yml` runs on every PR (build matrix Node 22/24/26, lint, unit + integration tests). `release.yml` builds and publishes the multi-arch Docker image to GHCR — it runs **only** on a `v*` tag push or a manual `workflow_dispatch` (dry-run, no publish). **PR CI does not exercise `release.yml`.**
+- **Dependabot grouping** (`.github/dependabot.yml`): minor/patch action bumps are batched into one PR (`actions-minor` group); each **major** action bump arrives as its own PR so it can be reviewed individually.
+- **Validate major action bumps that touch `release.yml` before merging.** Because PR CI never runs `release.yml`, a breaking change in a `docker/*` or `actions/{up,down}load-artifact` major could land unvalidated and only surface on a real release. Trigger a **Release dispatch dry-run** first:
+  ```bash
+  gh workflow run release.yml          # workflow_dispatch = build + per-arch E2E, no publish
+  gh run watch                         # confirm both arches go green
+  ```
+  Only merge the major bump once the dry-run passes. (Background: #44/#45.)
+
 ## Code Style
 
 - TypeScript strict mode; ESLint with `@typescript-eslint` rules (`eslint.config.js`)
