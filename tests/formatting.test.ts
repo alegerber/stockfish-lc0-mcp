@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatScore, formatPositionAnalysis, formatGameAnalysis } from '../src/services/formatting.js';
+import { formatScore, formatPositionAnalysis, formatGameAnalysis, truncateOutput } from '../src/services/formatting.js';
 import type { PositionAnalysis, GameAnalysis } from '../src/types.js';
 
 describe('formatScore', () => {
@@ -124,5 +124,17 @@ describe('formatGameAnalysis', () => {
     expect(output).toContain('Blunders');
     expect(output).toContain('White');
     expect(output).toContain('Black');
+  });
+});
+
+describe('truncateOutput', () => {
+  it('leaves output within the limit unchanged', () => {
+    expect(truncateOutput('short')).toBe('short');
+  });
+
+  it('truncates oversized output and adds a notice', () => {
+    const out = truncateOutput('x'.repeat(60_000));
+    expect(out.length).toBeLessThanOrEqual(50_000);
+    expect(out).toContain('truncated');
   });
 });

@@ -266,4 +266,11 @@ describe('analyseGame — engine efficiency & resilience', () => {
     // 2. Nf3 holds White's +2.00 → drop ≈ 0, NOT a large negative (inverted POV).
     expect(moves[2].evalDrop).toBe(0);
   });
+
+  it('rejects when given an already-aborted signal', async () => {
+    const engine = makeEngine();
+    await expect(
+      analyseGame(engine, '1. e4 e5', 20, AbortSignal.abort())
+    ).rejects.toThrow(/cancel/i);
+  });
 });

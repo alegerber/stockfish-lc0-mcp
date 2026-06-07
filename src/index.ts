@@ -13,7 +13,21 @@ import { analysePosition } from './tools/analyse-position.js';
 import { analyseGame } from './tools/analyse-game.js';
 import { lookupOpeningByQuery, identifyOpeningFromPgn } from './tools/openings.js';
 import { generatePuzzle } from './tools/puzzle.js';
+import { truncateOutput } from './services/formatting.js';
 import { DEFAULT_ENGINE_TIMEOUT_MS } from './constants.js';
+import { readFileSync } from 'node:fs';
+
+// Single source of truth for the version — read from package.json at runtime,
+// with a safe fallback so a stripped deployment can't crash startup.
+let serverVersion = '0.0.0';
+try {
+  const pkg = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+  ) as { version?: string };
+  if (pkg.version) serverVersion = pkg.version;
+} catch (err) {
+  console.error(`[chess-mcp] Could not read version from package.json: ${err instanceof Error ? err.message : err}`);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -33,18 +47,25 @@ function parsePositiveInt(raw: string | undefined, name: string, defaultValue: n
  * On success returns structured content; on failure returns isError with the message.
  */
 function wrapTool<T>(
-  fn: (args: T) => Promise<{ text: string; json: Record<string, unknown> }>
+  fn: (args: T, signal?: AbortSignal) => Promise<{ text: string; json: Record<string, unknown> }>
 ) {
-  return async (args: T) => {
+  return async (args: T, extra?: { signal?: AbortSignal }) => {
     try {
-      const result = await fn(args);
+      const result = await fn(args, extra?.signal);
+      // truncateOutput caps the human-readable text channel; structuredContent
+      // is structured data and is passed through as-is.
       return {
-        content: [{ type: 'text' as const, text: result.text }],
+        content: [{ type: 'text' as const, text: truncateOutput(result.text) }],
         structuredContent: result.json,
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { isError: true as const, content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      // Conventional MCP error: isError + text (no structuredContent — it would
+      // diverge from the success shape and there is no outputSchema to validate).
+      return {
+        isError: true as const,
+        content: [{ type: 'text' as const, text: `Error: ${msg}` }],
+      };
     }
   };
 }
@@ -72,7 +93,7 @@ if (lc0Enabled) {
 
 const server = new McpServer({
   name: 'stockfish-lc0-mcp',
-  version: '2.0.0',
+  version: serverVersion,
 });
 
 // ── Tool 1: Analyse Position ──────────────────────────────────────────────
@@ -105,7 +126,7 @@ Examples:
       openWorldHint: false,
     },
   },
-  wrapTool(({ fen, depth, multiPv }) => analysePosition(sfEngine, fen, depth, multiPv))
+  wrapTool(({ fen, depth, multiPv }, signal) => analysePosition(sfEngine, fen, depth, multiPv, signal))
 );
 
 // ── Tool 2: Analyse Game ──────────────────────────────────────────────────
@@ -141,7 +162,7 @@ Examples:
       openWorldHint: false,
     },
   },
-  wrapTool(({ pgn, depth }) => analyseGame(sfEngine, pgn, depth))
+  wrapTool(({ pgn, depth }, signal) => analyseGame(sfEngine, pgn, depth, signal))
 );
 
 // ── Tool 3: Lookup Opening ────────────────────────────────────────────────
@@ -235,7 +256,7 @@ Examples:
       openWorldHint: false,
     },
   },
-  wrapTool(({ fen, depth }) => generatePuzzle(sfEngine, fen, depth))
+  wrapTool(({ fen, depth }, signal) => generatePuzzle(sfEngine, fen, depth, signal))
 );
 
 // ── Lc0 Tools (only registered when LC0_WEIGHTS_PATH is set) ──────────────
@@ -282,7 +303,7 @@ Examples:
         openWorldHint: false,
       },
     },
-    wrapTool(({ fen, depth, multiPv }) => analysePosition(requireLc0(), fen, depth, multiPv))
+    wrapTool(({ fen, depth, multiPv }, signal) => analysePosition(requireLc0(), fen, depth, multiPv, signal))
   );
 
   // ── Lc0 Tool 2: Analyse Game ─────────────────────────────────────────
@@ -318,7 +339,7 @@ Examples:
         openWorldHint: false,
       },
     },
-    wrapTool(({ pgn, depth }) => analyseGame(requireLc0(), pgn, depth))
+    wrapTool(({ pgn, depth }, signal) => analyseGame(requireLc0(), pgn, depth, signal))
   );
 
   // ── Lc0 Tool 3: Generate Puzzle ──────────────────────────────────────
@@ -349,7 +370,7 @@ Examples:
         openWorldHint: false,
       },
     },
-    wrapTool(({ fen, depth }) => generatePuzzle(requireLc0(), fen, depth))
+    wrapTool(({ fen, depth }, signal) => generatePuzzle(requireLc0(), fen, depth, signal))
   );
 
   console.error('[chess-mcp] Lc0 tools registered: lc0_analyse_position, lc0_analyse_game, lc0_generate_puzzle');

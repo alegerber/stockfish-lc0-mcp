@@ -7,7 +7,8 @@ import { formatScore } from '../services/formatting.js';
 export async function generatePuzzle(
   engine: UciEngine,
   fen: string,
-  depth: number
+  depth: number,
+  signal?: AbortSignal
 ): Promise<{ text: string; json: Record<string, unknown> }> {
   const fenCheck = validateFen(fen);
   if (!fenCheck.valid) {
@@ -15,7 +16,7 @@ export async function generatePuzzle(
   }
 
   // Analyse with 2 PVs to compare best vs second-best
-  const analysis = await engine.analyse(fen, depth, 2);
+  const analysis = await engine.analyse(fen, depth, 2, signal);
   const lines = analysis.lines;
 
   if (lines.length === 0) {

@@ -8,7 +8,8 @@ import { START_FEN, BLUNDER_THRESHOLD, MISTAKE_THRESHOLD, INACCURACY_THRESHOLD, 
 export async function analyseGame(
   engine: UciEngine,
   pgn: string,
-  depth: number
+  depth: number,
+  signal?: AbortSignal
 ): Promise<{ text: string; json: Record<string, unknown> }> {
   if (!pgn.trim()) {
     throw new Error('PGN cannot be empty. Please provide a valid game.');
@@ -17,6 +18,7 @@ export async function analyseGame(
   if (moves.length === 0) {
     throw new Error('PGN contains no moves. Please provide a valid game.');
   }
+  if (signal?.aborted) throw new Error('Analysis cancelled');
 
   // Detect opening
   const sanMoves = moves.map((m) => m.san);
@@ -27,7 +29,7 @@ export async function analyseGame(
   // reused as the "before" analysis of the next move, so each position is
   // analysed exactly once (N+1 calls, not 2N+1). safeAnalyse returns null on
   // engine failure (timeout/crash) instead of throwing.
-  let prevAnalysis: PositionAnalysis | null = await safeAnalyse(engine, START_FEN, depth);
+  let prevAnalysis: PositionAnalysis | null = await safeAnalyse(engine, START_FEN, depth, signal);
   let prevScore: UciScore = prevAnalysis?.evaluation ?? { type: 'cp', value: 0 };
 
   const moveAnalyses: MoveAnalysis[] = [];
@@ -35,6 +37,7 @@ export async function analyseGame(
   let skippedMoves = 0;
 
   for (let i = 0; i < moves.length; i++) {
+    if (signal?.aborted) throw new Error('Analysis cancelled');
     const move = moves[i];
     const side: 'white' | 'black' = i % 2 === 0 ? 'white' : 'black';
     const moveNumber = Math.floor(i / 2) + 1;
@@ -68,7 +71,7 @@ export async function analyseGame(
       classification = classifyMove(drop, move.san === bestMoveSan);
     } else {
       // Normal position — analyse after the move (reused as next "before").
-      curAnalysis = await safeAnalyse(engine, move.fen, depth);
+      curAnalysis = await safeAnalyse(engine, move.fen, depth, signal);
       if (curAnalysis === null) {
         // Engine failed (timeout/crash): tolerate it — mark this move
         // unanalysed, keep the eval chain stable, and continue the game.
@@ -185,11 +188,13 @@ export async function analyseGame(
 async function safeAnalyse(
   engine: UciEngine,
   fen: string,
-  depth: number
+  depth: number,
+  signal?: AbortSignal
 ): Promise<PositionAnalysis | null> {
   try {
-    return await engine.analyse(fen, depth, 1);
+    return await engine.analyse(fen, depth, 1, signal);
   } catch (err) {
+    if (signal?.aborted) throw err; // propagate cancellation — don't treat it as a skipped move
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[analyse-game] analysis failed for "${fen}": ${msg}`);
     return null;

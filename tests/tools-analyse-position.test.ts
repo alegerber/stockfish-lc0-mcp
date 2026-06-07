@@ -89,7 +89,7 @@ describe('analysePosition', () => {
   it('calls engine.analyse with correct arguments', async () => {
     const engine = makeEngine();
     await analysePosition(engine, START_FEN, 15, 2);
-    expect(engine.analyse).toHaveBeenCalledWith(START_FEN, 15, 2);
+    expect(engine.analyse).toHaveBeenCalledWith(START_FEN, 15, 2, undefined);
   });
 
   it('text contains depth and evaluation', async () => {
@@ -104,5 +104,12 @@ describe('analysePosition', () => {
     const engine = makeEngine({ fen: midGameFen });
     const result = await analysePosition(engine, midGameFen, 20, 1);
     expect(result.json.fen).toBe(midGameFen);
+  });
+
+  it('forwards the abort signal to engine.analyse', async () => {
+    const engine = makeEngine();
+    const signal = AbortSignal.abort();
+    await analysePosition(engine, START_FEN, 20, 3, signal);
+    expect(engine.analyse).toHaveBeenCalledWith(START_FEN, 20, 3, signal);
   });
 });
