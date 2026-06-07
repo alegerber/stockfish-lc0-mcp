@@ -8,6 +8,11 @@ import {
   LookupOpeningSchema,
   IdentifyOpeningSchema,
   GeneratePuzzleSchema,
+  AnalysePositionOutput,
+  AnalyseGameOutput,
+  LookupOpeningOutput,
+  IdentifyOpeningOutput,
+  GeneratePuzzleOutput,
 } from './schemas/index.js';
 import { analysePosition } from './tools/analyse-position.js';
 import { analyseGame } from './tools/analyse-game.js';
@@ -119,6 +124,7 @@ Examples:
   - "Analyse this position: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
   - "What is the best move for black in FEN ...?"`,
     inputSchema: AnalysePositionSchema,
+    outputSchema: AnalysePositionOutput,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -155,6 +161,7 @@ Examples:
   - "Analyse this game: 1. e4 e5 2. Nf3 Nc6 ..."
   - "Review my chess.com game [PGN]"`,
     inputSchema: AnalyseGameSchema,
+    outputSchema: AnalyseGameOutput,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -185,6 +192,7 @@ Examples:
   - "Look up the Italian Game"
   - "What openings start with B2?"`,
     inputSchema: LookupOpeningSchema,
+    outputSchema: LookupOpeningOutput,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -216,6 +224,7 @@ Examples:
   - "What opening is 1. e4 e5 2. Qh5?"
   - "Identify the opening from this PGN: ..."`,
     inputSchema: IdentifyOpeningSchema,
+    outputSchema: IdentifyOpeningOutput,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -250,6 +259,7 @@ Examples:
   - "Make a puzzle from this position: [FEN]"
   - "Find tactics in this position: ..."`,
     inputSchema: GeneratePuzzleSchema,
+    outputSchema: GeneratePuzzleOutput,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -297,6 +307,7 @@ Examples:
   - "Analyse this position with Lc0: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
   - "What does the neural network think of this position?"`,
       inputSchema: AnalysePositionSchema,
+      outputSchema: AnalysePositionOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -333,6 +344,7 @@ Examples:
   - "Analyse this game with Lc0: 1. e4 e5 2. Nf3 Nc6 ..."
   - "Get the neural network's take on my game [PGN]"`,
       inputSchema: AnalyseGameSchema,
+      outputSchema: AnalyseGameOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -365,6 +377,7 @@ Examples:
   - "Make a puzzle with Lc0 from this position: [FEN]"
   - "Find tactics using the neural network: ..."`,
       inputSchema: GeneratePuzzleSchema,
+      outputSchema: GeneratePuzzleOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
