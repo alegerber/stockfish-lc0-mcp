@@ -1,6 +1,6 @@
 {
   "name": "stockfish-lc0-mcp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A TypeScript-based MCP server that exposes Stockfish and Lc0 chess engine capabilities to AI assistants — position/game analysis, opening database lookup, and puzzle generation. Deployable via Docker or Node.js.",
   "main": "dist/index.js",
   "license": "MIT",
