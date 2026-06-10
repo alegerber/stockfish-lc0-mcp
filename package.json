@@ -3,13 +3,38 @@
   "version": "2.1.0",
   "description": "A TypeScript-based MCP server that exposes Stockfish and Lc0 chess engine capabilities to AI assistants — position/game analysis, opening database lookup, and puzzle generation. Deployable via Docker or Node.js.",
   "main": "dist/index.js",
+  "bin": {
+    "stockfish-lc0-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alegerber/stockfish-lc0-mcp.git"
+  },
+  "homepage": "https://github.com/alegerber/stockfish-lc0-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/alegerber/stockfish-lc0-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "chess",
+    "stockfish",
+    "lc0",
+    "uci",
+    "chess-engine",
+    "chess-analysis"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
     "build": "tsc",
+    "prepack": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest run --exclude tests/integration.test.ts",

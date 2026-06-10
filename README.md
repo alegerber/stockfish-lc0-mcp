@@ -44,7 +44,19 @@ docker run -i \
 docker compose up --build
 ```
 
-### Option 2: Local Node.js
+### Option 2: npm (npx)
+
+Prerequisites: Node.js 22+, Stockfish binary installed (the npm package does **not** bundle the engines — the Docker image does).
+
+```bash
+# Install Stockfish
+# macOS:  brew install stockfish
+# Ubuntu: sudo apt install stockfish
+
+npx stockfish-lc0-mcp
+```
+
+### Option 3: Local Node.js (from source)
 
 Prerequisites: Node.js 22+ (CI-tested on LTS 22, 24, 26), Stockfish binary installed.
 
@@ -117,6 +129,21 @@ Add to your `claude_desktop_config.json`:
         "-v", "/path/to/weights:/weights",
         "stockfish-lc0-mcp"
       ]
+    }
+  }
+}
+```
+
+### npm (npx)
+
+Requires a locally installed Stockfish (see [Quick Start](#option-2-npm-npx)).
+
+```json
+{
+  "mcpServers": {
+    "chess": {
+      "command": "npx",
+      "args": ["-y", "stockfish-lc0-mcp"]
     }
   }
 }
