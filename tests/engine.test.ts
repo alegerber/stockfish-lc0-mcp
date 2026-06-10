@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { StockfishEngine, assertSafeUciCommand } from '../src/services/engine.js';
+import { StockfishEngine, assertSafeUciCommand, missingBinaryHint } from '../src/services/engine.js';
 
 // These tests use `cat` as a stand-in "engine": it echoes stdin but never emits
 // the UCI handshake reply ("uciok"), so they exercise the timeout and shutdown
@@ -51,4 +51,55 @@ describe('assertSafeUciCommand (UCI-injection defense)', () => {
     expect(() => assertSafeUciCommand(`go depth 8${CR}stop`)).toThrow(/control characters/);
     expect(() => assertSafeUciCommand(`setoption name Backend value${TAB}x`)).toThrow(/control characters/);
   });
+});
+
+describe('missingBinaryHint', () => {
+  const paths = { stockfish: '/opt/homebrew/bin/stockfish', lc0: 'lc0' };
+
+  // Shape of the error Node's child_process emits when spawn() can't find the binary.
+  const spawnEnoent = (path: string): NodeJS.ErrnoException =>
+    Object.assign(new Error(`spawn ${path} ENOENT`), { code: 'ENOENT', syscall: `spawn ${path}`, path });
+
+  it('explains how to install Stockfish when its binary is missing', () => {
+    const hint = missingBinaryHint(spawnEnoent(paths.stockfish), paths);
+    expect(hint).toContain('/opt/homebrew/bin/stockfish');
+    expect(hint).toContain('brew install stockfish');
+    expect(hint).toContain('STOCKFISH_PATH');
+  });
+
+  it('points at LC0_PATH and LC0_WEIGHTS_PATH when the Lc0 binary is missing', () => {
+    const hint = missingBinaryHint(spawnEnoent('lc0'), paths);
+    expect(hint).toContain('LC0_PATH');
+    expect(hint).toContain('LC0_WEIGHTS_PATH');
+  });
+
+  it('still names the missing binary when the path matches neither engine', () => {
+    const hint = missingBinaryHint(spawnEnoent('/custom/engine'), paths);
+    expect(hint).toContain('/custom/engine');
+  });
+
+  it('returns null for non-ENOENT errors and non-errors', () => {
+    expect(missingBinaryHint(new Error('Timeout waiting for uciok'), paths)).toBeNull();
+    expect(missingBinaryHint(undefined, paths)).toBeNull();
+    expect(missingBinaryHint('ENOENT', paths)).toBeNull();
+  });
+
+  it('finds the spawn failure behind a wrapped error (cause chain)', () => {
+    const wrapped = Object.assign(new Error('Engine process error: spawn lc0 ENOENT'), {
+      cause: spawnEnoent('lc0'),
+    });
+    expect(missingBinaryHint(wrapped, paths)).toContain('LC0_PATH');
+  });
+
+  it('yields a hint for the error init() actually rejects with for a missing binary', async () => {
+    const engine = new StockfishEngine('/nonexistent/stockfish-binary', 1, 16, 2_000);
+    const err = await engine.init().then(
+      () => null,
+      (e: unknown) => e
+    );
+    await engine.quit().catch(() => {});
+    expect(err).toBeTruthy();
+    const hint = missingBinaryHint(err, { stockfish: '/nonexistent/stockfish-binary', lc0: 'lc0' });
+    expect(hint).toContain('/nonexistent/stockfish-binary');
+  }, 5_000);
 });

@@ -31,6 +31,42 @@ export function assertSafeUciCommand(cmd: string): void {
   }
 }
 
+/**
+ * Maps a spawn-ENOENT startup failure to an actionable install hint, or null
+ * for anything else. npx users won't have the engines bundled (unlike the
+ * Docker image), so "spawn stockfish ENOENT" must become a real instruction.
+ */
+export function missingBinaryHint(err: unknown, paths: { stockfish: string; lc0: string }): string | null {
+  // The engine wraps spawn failures ("Engine process error: …" with the
+  // original error as `cause`), so walk the cause chain to find the errno.
+  let cursor: unknown = err;
+  let e: NodeJS.ErrnoException | null = null;
+  for (let depth = 0; cursor instanceof Error && depth < 5; depth++) {
+    const candidate = cursor as NodeJS.ErrnoException;
+    if (candidate.code === 'ENOENT' && typeof candidate.path === 'string') {
+      e = candidate;
+      break;
+    }
+    cursor = cursor.cause;
+  }
+  if (e === null) return null;
+
+  if (e.path === paths.lc0) {
+    return (
+      `Lc0 binary "${e.path}" was not found. Install Lc0 (macOS: "brew install lc0") and/or set LC0_PATH ` +
+      'to the binary — or unset LC0_WEIGHTS_PATH to run with Stockfish only.'
+    );
+  }
+  if (e.path === paths.stockfish) {
+    return (
+      `Stockfish binary "${e.path}" was not found. Install it (macOS: "brew install stockfish", ` +
+      'Ubuntu/Debian: "sudo apt install stockfish") and/or set STOCKFISH_PATH to the binary. ' +
+      'The npm package does not bundle the engines — the Docker image does.'
+    );
+  }
+  return `Binary "${e.path}" was not found. Check your STOCKFISH_PATH / LC0_PATH configuration.`;
+}
+
 /** Parse UCI info lines into structured data. */
 function parseInfoLines(output: string[], multiPv: number): UciLine[] {
   const pvMap = new Map<number, UciLine>();
@@ -169,7 +205,8 @@ abstract class BaseUciEngine implements UciEngine {
       this.pendingReject = null;
       this.process = null;
       this.ready = false;
-      reject?.(new Error(`Engine process error: ${err.message}`));
+      // Keep the original errno error reachable (missingBinaryHint walks `cause`).
+      reject?.(new Error(`Engine process error: ${err.message}`, { cause: err }));
     });
 
     this.process.on('exit', (code) => {

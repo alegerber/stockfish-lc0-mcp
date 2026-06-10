@@ -1,7 +1,8 @@
+#!/usr/bin/env node
 // Main entry point – Chess Engine MCP Server (Stockfish + Lc0)
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StockfishEngine, Lc0Engine } from './services/engine.js';
+import { StockfishEngine, Lc0Engine, missingBinaryHint } from './services/engine.js';
 import {
   AnalysePositionSchema,
   AnalyseGameSchema,
@@ -433,5 +434,7 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   console.error('[stockfish-lc0-mcp] Fatal:', err);
+  const hint = missingBinaryHint(err, { stockfish: SF_PATH, lc0: LC0_PATH });
+  if (hint) console.error(`[stockfish-lc0-mcp] ${hint}`);
   process.exit(1);
 });
