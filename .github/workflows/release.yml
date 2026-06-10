@@ -151,7 +151,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create the GitHub Release
+      contents: read
       packages: write # write the multi-arch manifest tag
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -179,15 +179,6 @@ jobs:
             $(printf "${IMAGE}@sha256:%s " *)
           docker buildx imagetools inspect "${IMAGE}:${{ needs.guard.outputs.version }}"
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            --notes "Container image: \`docker pull ${IMAGE}:${{ needs.guard.outputs.version }}\` (also tagged \`latest\`; linux/amd64 + linux/arm64). npm package: \`npx stockfish-lc0-mcp@${{ needs.guard.outputs.version }}\`."
-
   # Gated on the same per-arch E2E as the Docker push (via `needs: build`).
   # Auth is npm Trusted Publishing: GitHub's OIDC token is exchanged for a
   # publish credential at run time — no NPM_TOKEN secret exists to steal.
@@ -206,15 +197,60 @@ jobs:
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
-      # Trusted publishing needs npm >= 11.5.1 — upgrade in case the runner's
-      # Node bundles an older one.
-      - run: npm install -g npm@latest
+      # Node 24 bundles a new-enough npm — assert instead of pulling a moving
+      # npm@latest into the publish job at release time.
+      - name: Assert npm >= 11.5.1 (trusted-publishing floor)
+        run: |
+          node -e '
+            const [maj, min, pat] = process.argv[1].split(".").map(Number);
+            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && pat >= 1)));
+            if (!ok) { console.error("npm", process.argv[1], "< 11.5.1 — trusted publishing unsupported"); process.exit(1); }
+          ' "$(npm -v)"
 
       - run: npm ci
 
-      - name: Verify tarball contents (dry run)
-        run: npm pack --dry-run
+      - name: Verify the tarball ships the bin (dry run)
+        run: |
+          npm pack --dry-run --json > "$RUNNER_TEMP/pack.json"
+          node -e '
+            const files = require(process.argv[1])[0].files.map((f) => f.path);
+            if (!files.includes("dist/index.js")) {
+              console.error("dist/index.js (bin target) missing from tarball:", files);
+              process.exit(1);
+            }
+            console.log("tarball OK —", files.length, "files, bin present");
+          ' "$RUNNER_TEMP/pack.json"
 
+      # Skip (don't fail) when the version is already on npm so a partial-failure
+      # re-run of the same tag can still recover the Docker/Release side.
+      # First-ever publish must be done manually once: npm trusted publishing
+      # can only be configured for a package that already exists.
       - name: Publish to npm
         if: needs.guard.outputs.publish == 'true'
-        run: npm publish
+        run: |
+          V="${{ needs.guard.outputs.version }}"
+          if npm view "stockfish-lc0-mcp@${V}" version >/dev/null 2>&1; then
+            echo "stockfish-lc0-mcp@${V} already on npm — skipping (idempotent re-run)"
+            exit 0
+          fi
+          npm publish
+
+  # Create the GitHub Release only after BOTH registries succeeded — its notes
+  # advertise the Docker tag and the npx command, so neither may be missing.
+  release:
+    needs: [guard, merge, npm-publish]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "Container image: \`docker pull ${IMAGE}:${{ needs.guard.outputs.version }}\` (also tagged \`latest\`; linux/amd64 + linux/arm64). npm package: \`npx stockfish-lc0-mcp@${{ needs.guard.outputs.version }}\`."

@@ -49,7 +49,7 @@ export function missingBinaryHint(err: unknown, paths: { stockfish: string; lc0:
     }
     cursor = cursor.cause;
   }
-  if (e === null || typeof e.path !== 'string') return null;
+  if (e === null) return null;
 
   if (e.path === paths.lc0) {
     return (

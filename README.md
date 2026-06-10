@@ -46,13 +46,9 @@ docker compose up --build
 
 ### Option 2: npm (npx)
 
-Prerequisites: Node.js 22+, Stockfish binary installed (the npm package does **not** bundle the engines — the Docker image does).
+Prerequisites: Node.js 22+ and a locally installed Stockfish — see the install commands under [Option 3](#option-3-local-nodejs-from-source). The npm package does **not** bundle the engines — the Docker image does.
 
 ```bash
-# Install Stockfish
-# macOS:  brew install stockfish
-# Ubuntu: sudo apt install stockfish
-
 npx stockfish-lc0-mcp
 ```
 
@@ -136,14 +132,17 @@ Add to your `claude_desktop_config.json`:
 
 ### npm (npx)
 
-Requires a locally installed Stockfish (see [Quick Start](#option-2-npm-npx)).
+Requires a locally installed Stockfish (see [Quick Start](#option-2-npm-npx)). Set `STOCKFISH_PATH` explicitly: GUI-launched clients (e.g. Claude Desktop on macOS) don't inherit your shell's `PATH`, so a bare `stockfish` lookup can fail even though `brew install stockfish` succeeded.
 
 ```json
 {
   "mcpServers": {
     "chess": {
       "command": "npx",
-      "args": ["-y", "stockfish-lc0-mcp"]
+      "args": ["-y", "stockfish-lc0-mcp"],
+      "env": {
+        "STOCKFISH_PATH": "/opt/homebrew/bin/stockfish"
+      }
     }
   }
 }

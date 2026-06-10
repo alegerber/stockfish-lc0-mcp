@@ -7,7 +7,9 @@
     "stockfish-lc0-mcp": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map",
+    "!dist/**/*.d.ts"
   ],
   "license": "MIT",
   "type": "module",
