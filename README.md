@@ -221,6 +221,23 @@ npm test             # Run unit tests (Vitest, 150+ tests)
 npm run lint         # ESLint
 ```
 
+The unit suite includes subprocess lifecycle tests for stdin EOF, shutdown
+during initialization/analysis, startup failures, and unresponsive engines.
+These tests require a Unix-like host and assert that engine processes are reaped.
+
+To check container removal with real engines, build the image and run:
+
+```bash
+docker build -t stockfish-lc0-mcp .
+LIFECYCLE_DOCKER_IMAGE=stockfish-lc0-mcp npm run test:lifecycle:docker
+```
+
+The Docker checks cover startup disconnects, EOF after analysis, EOF during
+analysis, abrupt client termination, and repeated connections. Each check uses
+a unique container name and resource limits, asserts automatic removal, and
+cleans up its own container on failure. `--rm` only removes containers after
+they exit; the server must shut down its engines when its stdio client leaves.
+
 ## License
 
 MIT
