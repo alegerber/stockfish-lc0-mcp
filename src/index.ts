@@ -24,6 +24,7 @@ import { generatePuzzle } from './tools/puzzle.js';
 import { truncateOutput } from './services/formatting.js';
 import { DEFAULT_ENGINE_TIMEOUT_MS } from './constants.js';
 import { readFileSync } from 'node:fs';
+import { PassThrough } from 'node:stream';
 
 // Single source of truth for the version — read from package.json at runtime,
 // with a safe fallback so a stripped deployment can't crash startup.
@@ -59,6 +60,7 @@ function wrapTool<T>(
 ) {
   return async (args: T, extra?: { signal?: AbortSignal }) => {
     try {
+      if (shuttingDown) throw new Error('Server shutting down');
       const result = await fn(args, extra?.signal);
       // truncateOutput caps the human-readable text channel; structuredContent
       // is structured data and is passed through as-is.
@@ -402,39 +404,79 @@ Examples:
 
 // ── Start ─────────────────────────────────────────────────────────────────
 
+let shuttingDown = false;
+
+async function shutdown(exitCode = 0): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.error('[stockfish-lc0-mcp] Shutting down...');
+  const deadline = setTimeout(() => {
+    console.error('[stockfish-lc0-mcp] Shutdown timed out');
+    process.exit(1);
+  }, 5_000);
+  deadline.unref();
+
+  // Close the protocol to abort requests, and reap BOTH engines even if one
+  // cleanup fails. This also handles failures partway through initialization.
+  const results = await Promise.allSettled([
+    server.close(), sfEngine.quit(), ...(lc0Engine ? [lc0Engine.quit()] : []),
+  ]);
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.error('[stockfish-lc0-mcp] Shutdown error:', result.reason);
+      exitCode = 1;
+    }
+  }
+  clearTimeout(deadline);
+  process.exit(exitCode);
+}
+
+// Observe EOF while engines initialize, without discarding an early MCP
+// initialize request. PassThrough buffers it with normal stream backpressure
+// until the transport attaches. The SDK's stdio transport doesn't handle EOF.
+const input = new PassThrough();
+process.stdin.once('end', () => { void shutdown(); });
+process.stdin.once('close', () => { void shutdown(); });
+process.stdin.on('error', (err) => {
+  console.error('[stockfish-lc0-mcp] Stdin error:', err);
+  void shutdown(1);
+});
+process.stdout.on('error', (err) => {
+  console.error('[stockfish-lc0-mcp] Stdout error:', err);
+  void shutdown(1);
+});
+process.on('SIGINT', () => { void shutdown(); });
+process.on('SIGTERM', () => { void shutdown(); });
+// Use the protocol callback rather than overwriting the SDK's transport hooks.
+server.server.onclose = () => { void shutdown(); };
+process.stdin.pipe(input);
+
 async function main(): Promise<void> {
   console.error('[stockfish-lc0-mcp] Initialising Stockfish engine...');
   await sfEngine.init();
+  if (shuttingDown) return;
   console.error('[stockfish-lc0-mcp] Stockfish ready.');
 
   if (lc0Engine) {
     console.error('[stockfish-lc0-mcp] Initialising Lc0 engine...');
     await lc0Engine.init();
+    if (shuttingDown) return;
     console.error('[stockfish-lc0-mcp] Lc0 ready.');
   } else {
     console.error('[stockfish-lc0-mcp] Lc0 disabled (set LC0_WEIGHTS_PATH to enable).');
   }
 
   console.error('[stockfish-lc0-mcp] Starting stdio transport...');
-  const transport = new StdioServerTransport();
+  const transport = new StdioServerTransport(input);
   await server.connect(transport);
+  if (shuttingDown) return;
   console.error('[stockfish-lc0-mcp] MCP server running on stdio');
-
-  // Graceful shutdown
-  const shutdown = async (): Promise<void> => {
-    console.error('[stockfish-lc0-mcp] Shutting down...');
-    await sfEngine.quit();
-    if (lc0Engine) await lc0Engine.quit();
-    process.exit(0);
-  };
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
+  if (shuttingDown) return;
   console.error('[stockfish-lc0-mcp] Fatal:', err);
   const hint = missingBinaryHint(err, { stockfish: SF_PATH, lc0: LC0_PATH });
   if (hint) console.error(`[stockfish-lc0-mcp] ${hint}`);
-  process.exit(1);
+  await shutdown(1);
 });

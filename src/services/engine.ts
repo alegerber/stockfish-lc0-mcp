@@ -164,6 +164,8 @@ abstract class BaseUciEngine implements UciEngine {
    * the same engine can never interleave their UCI commands on stdin/stdout.
    */
   private opQueue: Promise<unknown> = Promise.resolve();
+  private generation = 0;
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(binaryPath: string, timeoutMs: number = DEFAULT_ENGINE_TIMEOUT_MS) {
     this.binaryPath = binaryPath;
@@ -172,7 +174,15 @@ abstract class BaseUciEngine implements UciEngine {
 
   /** Run `fn` as an exclusive critical section on this engine. */
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
-    const result = this.opQueue.then(() => fn());
+    const generation = this.generation;
+    const result = this.opQueue.then(() => {
+      // quit() must cancel queued operations too: otherwise the next analysis
+      // could spawn a replacement process while the server is shutting down.
+      if (generation !== this.generation || this.shutdownPromise) {
+        throw new Error(`${this.displayName} engine shutting down`);
+      }
+      return fn();
+    });
     // Advance the queue even when this op rejects, so the next one still runs.
     this.opQueue = result.then(() => {}, () => {});
     return result;
@@ -393,6 +403,8 @@ abstract class BaseUciEngine implements UciEngine {
   }
 
   async quit(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
+    this.generation++;
     const proc = this.process;
     if (!proc) return;
     // Reject any in-flight sendAndWait first so it doesn't hang until timeout.
@@ -405,12 +417,27 @@ abstract class BaseUciEngine implements UciEngine {
     proc.removeAllListeners('exit');
     this.process = null;
     this.ready = false;
-    try {
-      proc.stdin.write('quit\n');
-    } catch {
-      /* process may already be gone */
-    }
-    proc.kill();
+    // Await the child close event before the server exits, including when the
+    // engine ignores quit/SIGTERM. Sending a signal alone can orphan a child.
+    this.shutdownPromise = new Promise<void>((resolve) => {
+      const forceKill = setTimeout(() => { proc.kill('SIGKILL'); }, 1_000);
+      proc.once('close', () => {
+        clearTimeout(forceKill);
+        resolve();
+      });
+      // Keep late process errors handled after dropping the state-mutating
+      // listeners above (e.g. a spawn failure racing with shutdown).
+      proc.on('error', (err) => {
+        console.error(`[${this.displayName}] Shutdown process error: ${err.message}`);
+      });
+      try {
+        proc.stdin.write('quit\n');
+      } catch {
+        /* process may already be gone */
+      }
+      proc.kill();
+    }).finally(() => { this.shutdownPromise = null; });
+    return this.shutdownPromise;
   }
 }
 

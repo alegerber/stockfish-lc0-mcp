@@ -18,10 +18,27 @@ describe('BaseUciEngine reliability', () => {
   it('quit() rejects an in-flight operation instead of leaving it hanging', async () => {
     const engine = new StockfishEngine('cat', 1, 16, 10_000);
     const pending = engine.analyse(START_FEN, 8, 1);
+    const rejected = expect(pending).rejects.toThrow();
     // let it spawn `cat` and start the (never-completing) handshake
     await new Promise((r) => setTimeout(r, 100));
     await engine.quit();
-    await expect(pending).rejects.toThrow();
+    await rejected;
+  }, 5_000);
+
+  it('quit() cancels initialization queued before a process has spawned', async () => {
+    const engine = new StockfishEngine('cat', 1, 16, 10_000);
+    const pending = expect(engine.init()).rejects.toThrow(/shutting down/);
+    await engine.quit();
+    await pending;
+  });
+
+  it('rejects queued analyses instead of restarting after quit()', async () => {
+    const engine = new StockfishEngine('cat', 1, 16, 10_000);
+    const pending = [engine.analyse(START_FEN), engine.analyse(START_FEN)];
+    const results = Promise.allSettled(pending);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await engine.quit();
+    expect((await results).map((result) => result.status)).toEqual(['rejected', 'rejected']);
   }, 5_000);
 
   it('rejects without spawning when given an already-aborted signal', async () => {
